@@ -1,10 +1,8 @@
 export type ProductKey =
+  | "servproof"
   | "driveproof"
   | "fleetproof"
-  | "rentproof"
-  | "shopproof"
-  | "assetproof"
-  | "claimproof";
+  | "rentproof";
 
 export type ProductLabels = {
   asset: string;

@@ -1,29 +1,90 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { getProductConfig } from "@/lib/products/registry";
 
 const liveProducts = [
+  getProductConfig("servproof"),
   getProductConfig("driveproof"),
   getProductConfig("fleetproof"),
   getProductConfig("rentproof"),
-] as const;
+].filter(Boolean) as ReturnType<typeof getProductConfig>[];
 
 const liveProductImageMap: Record<string, string> = {
+  servproof: "/images/equipment-proof.jpg",
   driveproof: "/images/driveproof-inspection.png",
   fleetproof: "/images/fleetproof-equipment.jpg",
   rentproof: "/images/rentproof-property.jpeg",
 };
 
+const productThemeMap: Record<
+  string,
+  {
+    primary: string;
+    border: string;
+    heroGradient: string;
+    surfaceGlow: string;
+    spotlight: string;
+    heroGlow: string;
+  }
+> = {
+  servproof: {
+    primary: "#18D3A4",
+    border: "rgba(24,211,164,0.26)",
+    heroGradient:
+      "linear-gradient(180deg, rgba(24,211,164,0.14), rgba(255,255,255,0.04))",
+    surfaceGlow: "rgba(24,211,164,0.16)",
+    spotlight: "rgba(24,211,164,0.18)",
+    heroGlow: "rgba(24,211,164,0.24)",
+  },
+  driveproof: {
+    primary: "#7D7BFF",
+    border: "rgba(125,123,255,0.26)",
+    heroGradient:
+      "linear-gradient(180deg, rgba(125,123,255,0.14), rgba(255,255,255,0.04))",
+    surfaceGlow: "rgba(125,123,255,0.16)",
+    spotlight: "rgba(125,123,255,0.18)",
+    heroGlow: "rgba(125,123,255,0.24)",
+  },
+  fleetproof: {
+    primary: "#FF8A1F",
+    border: "rgba(255,138,31,0.26)",
+    heroGradient:
+      "linear-gradient(180deg, rgba(255,138,31,0.14), rgba(255,255,255,0.04))",
+    surfaceGlow: "rgba(255,138,31,0.16)",
+    spotlight: "rgba(255,138,31,0.18)",
+    heroGlow: "rgba(255,138,31,0.24)",
+  },
+  rentproof: {
+    primary: "#38BDF8",
+    border: "rgba(56,189,248,0.26)",
+    heroGradient:
+      "linear-gradient(180deg, rgba(56,189,248,0.14), rgba(255,255,255,0.04))",
+    surfaceGlow: "rgba(56,189,248,0.16)",
+    spotlight: "rgba(56,189,248,0.18)",
+    heroGlow: "rgba(56,189,248,0.24)",
+  },
+};
+
 const liveProductDescriptions: Record<string, string> = {
+  servproof:
+    "Restaurant equipment service documentation for maintenance issues, failures, repairs, and multi-location accountability.",
   driveproof:
-    "Professional vehicle documentation for pickups, dropoffs, damage capture, guest accountability, and dispute-ready records.",
+    "Professional vehicle documentation for pickups, dropoffs, damage capture, and guest accountability.",
   fleetproof:
-    "Industrial inspection workflows for equipment, assignments, maintenance visibility, service discipline, and operational accountability.",
+    "Inspection workflows for equipment, assignments, maintenance visibility, and service accountability.",
   rentproof:
-    "Premium property turnover documentation for stays, guest incidents, room condition capture, and hospitality-grade records.",
+    "Premium property documentation for stays, guest incidents, and room condition capture.",
 };
 
 const liveProductBullets: Record<string, string[]> = {
+  servproof: [
+    "Restaurant equipment condition capture",
+    "Maintenance and failure reporting",
+    "Multi-location service accountability",
+  ],
   driveproof: [
     "Vehicle condition capture",
     "Pickup and dropoff inspections",
@@ -41,6 +102,24 @@ const liveProductBullets: Record<string, string[]> = {
   ],
 };
 
+const engineCards = [
+  {
+    title: "Asset",
+    text: "A vehicle, machine, property, or object being documented.",
+    accent: "#18D3A4",
+  },
+  {
+    title: "Inspection",
+    text: "Structured documentation capturing condition, photos, and notes at a specific moment.",
+    accent: "#7D7BFF",
+  },
+  {
+    title: "Record",
+    text: "A permanent history of inspections stored safely outside personal phones.",
+    accent: "#FF8A1F",
+  },
+] as const;
+
 const comingSoonProducts = [
   {
     name: "TowPROOF",
@@ -48,7 +127,7 @@ const comingSoonProducts = [
     glow: "rgba(250,204,21,0.18)",
     border: "rgba(250,204,21,0.24)",
     description:
-      "Built for tow operators, hot shot services, impounds, transport records, and condition-photo evidence that should not live forever in personal camera rolls.",
+      "Designed for tow operators, hot shot services, impounds, transport records, and vehicle condition documentation.",
     bullets: [
       "Tow intake and hookup photos",
       "Vehicle move and destination proof",
@@ -61,7 +140,7 @@ const comingSoonProducts = [
     glow: "rgba(239,68,68,0.18)",
     border: "rgba(239,68,68,0.24)",
     description:
-      "Built for accident-scene capture, exchanged driver information, incident records, and the first layer of truth before the story starts changing.",
+      "Accident-scene documentation for driver information, photos, and incident reporting before the story changes.",
     bullets: [
       "Scene photos with time and location context",
       "Driver, insurance, and witness information capture",
@@ -74,16 +153,76 @@ const comingSoonProducts = [
     glow: "rgba(59,130,246,0.18)",
     border: "rgba(59,130,246,0.24)",
     description:
-      "Built for repair shops, service intake, before-and-after condition capture, repair-progress visibility, and customer-vehicle accountability.",
+      "Repair shop documentation for service intake, before-and-after photos, and customer vehicle accountability.",
     bullets: [
       "Service intake documentation",
       "Before and after repair photos",
       "Featuring ClaimPROOF reporting",
     ],
   },
-];
+] as const;
+
+function useViewport() {
+  const [width, setWidth] = useState<number>(1440);
+
+  useEffect(() => {
+    const update = () => setWidth(window.innerWidth);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return {
+    width,
+    isMobile: width < 768,
+    isTablet: width >= 768 && width < 1180,
+  };
+}
 
 export default function HomePage() {
+  const { isMobile, isTablet } = useViewport();
+
+  const containerPadding = isMobile
+    ? "14px 12px 28px"
+    : isTablet
+      ? "18px 16px 34px"
+      : "20px 18px 40px";
+
+  const heroPadding = isMobile
+    ? "18px 14px 16px"
+    : isTablet
+      ? "22px 18px 18px"
+      : "28px 26px 24px";
+
+  const heroGridColumns = isMobile || isTablet ? "1fr" : "1.08fr 0.92fr";
+  const heroHeadingSize = isMobile ? 34 : isTablet ? 46 : 60;
+  const heroTextSize = isMobile ? 16 : isTablet ? 17 : 19;
+  const heroImageMinHeight = isMobile ? 220 : isTablet ? 300 : 420;
+
+  const statsGridColumns = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
+  const problemGridColumns = isMobile
+    ? "1fr"
+    : isTablet
+      ? "repeat(2, minmax(0, 1fr))"
+      : "repeat(3, minmax(0, 1fr))";
+  const engineGridColumns = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
+  const liveGridColumns = isMobile
+    ? "1fr"
+    : isTablet
+      ? "repeat(2, minmax(0, 1fr))"
+      : "repeat(4, minmax(0, 1fr))";
+  const comingSoonGridColumns = isMobile
+    ? "1fr"
+    : isTablet
+      ? "repeat(2, minmax(0, 1fr))"
+      : "repeat(3, minmax(0, 1fr))";
+  const finalGridColumns = isMobile || isTablet ? "1fr" : "1.06fr 0.94fr";
+
+  const sectionTitleSize = isMobile ? 22 : 28;
+  const productTitleSize = isMobile ? 26 : isTablet ? 30 : 34;
+  const comingSoonTitleSize = isMobile ? 24 : 30;
+  const finalTitleSize = isMobile ? 25 : isTablet ? 30 : 34;
+
   return (
     <main
       style={{
@@ -99,9 +238,9 @@ export default function HomePage() {
     >
       <div
         style={{
-          maxWidth: 1460,
+          maxWidth: 1360,
           margin: "0 auto",
-          padding: "28px 24px 64px",
+          padding: containerPadding,
         }}
       >
         <header
@@ -109,52 +248,72 @@ export default function HomePage() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 16,
+            gap: 14,
             flexWrap: "wrap",
-            marginBottom: 28,
+            marginBottom: 18,
           }}
         >
           <div
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: 12,
-              padding: "11px 18px",
+              gap: 10,
+              padding: "8px 14px 8px 10px",
               borderRadius: 999,
               border: "1px solid rgba(255,255,255,0.12)",
               background:
                 "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
               boxShadow:
-                "0 14px 34px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.08)",
+                "0 10px 24px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.08)",
               fontWeight: 900,
-              letterSpacing: 0.4,
+              letterSpacing: 0.3,
+              fontSize: 14,
             }}
           >
+            <div
+              style={{
+                position: "relative",
+                width: 24,
+                height: 24,
+                borderRadius: 999,
+                overflow: "hidden",
+                boxShadow: "0 0 16px rgba(24,211,164,0.22)",
+                flexShrink: 0,
+              }}
+            >
+              <Image
+                src="/images/proof-platform.png"
+                alt="PROOF Platform"
+                fill
+                style={{ objectFit: "cover" }}
+              />
+            </div>
             PROOF Platform
           </div>
 
           <nav
             style={{
               display: "flex",
-              gap: 10,
+              gap: 8,
               flexWrap: "wrap",
             }}
           >
             {liveProducts.map((product) => (
               <Link
-                key={product.key}
-                href={`/${product.key}`}
+                key={product.id}
+                href={`/${product.id}`}
                 style={{
                   textDecoration: "none",
                   color: "#E7EDF6",
-                  padding: "11px 16px",
+                  padding: "9px 13px",
                   borderRadius: 999,
                   border: "1px solid rgba(255,255,255,0.10)",
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
                   fontWeight: 800,
+                  fontSize: 13,
                   boxShadow:
-                    "0 10px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+                    "0 8px 18px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)",
                 }}
               >
                 {product.name}
@@ -167,13 +326,13 @@ export default function HomePage() {
           style={{
             position: "relative",
             overflow: "hidden",
-            borderRadius: 34,
+            borderRadius: 26,
             border: "1px solid rgba(255,255,255,0.10)",
             background:
               "linear-gradient(140deg, rgba(8,22,38,0.96) 0%, rgba(5,15,28,0.98) 52%, rgba(5,11,20,1) 100%)",
-            boxShadow: "0 30px 90px rgba(0,0,0,0.26)",
-            padding: "40px 40px 36px",
-            marginBottom: 30,
+            boxShadow: "0 22px 60px rgba(0,0,0,0.24)",
+            padding: heroPadding,
+            marginBottom: 20,
           }}
         >
           <div
@@ -194,8 +353,8 @@ export default function HomePage() {
             style={{
               position: "relative",
               display: "grid",
-              gridTemplateColumns: "1.12fr 0.88fr",
-              gap: 26,
+              gridTemplateColumns: heroGridColumns,
+              gap: isMobile ? 14 : 18,
               alignItems: "stretch",
             }}
           >
@@ -203,18 +362,18 @@ export default function HomePage() {
               <div
                 style={{
                   display: "inline-block",
-                  padding: "8px 12px",
+                  padding: "6px 10px",
                   borderRadius: 999,
-                  marginBottom: 18,
+                  marginBottom: 14,
                   background:
                     "linear-gradient(180deg, rgba(125,123,255,0.20), rgba(125,123,255,0.12))",
                   border: "1px solid rgba(165,164,255,0.26)",
                   color: "#BCBAFF",
-                  fontSize: 12,
+                  fontSize: 10,
                   fontWeight: 900,
-                  letterSpacing: 1,
+                  letterSpacing: 0.9,
                   textTransform: "uppercase",
-                  boxShadow: "0 10px 24px rgba(125,123,255,0.10)",
+                  boxShadow: "0 8px 18px rgba(125,123,255,0.10)",
                 }}
               >
                 Subscription-ready evidence infrastructure
@@ -222,12 +381,12 @@ export default function HomePage() {
 
               <h1
                 style={{
-                  fontSize: 76,
+                  fontSize: heroHeadingSize,
                   lineHeight: 0.95,
-                  letterSpacing: -2.8,
+                  letterSpacing: isMobile ? -1.2 : -2.1,
                   margin: 0,
-                  maxWidth: 860,
-                  textShadow: "0 16px 40px rgba(0,0,0,0.18)",
+                  maxWidth: 760,
+                  textShadow: "0 12px 28px rgba(0,0,0,0.16)",
                 }}
               >
                 One PROOF platform.
@@ -237,38 +396,38 @@ export default function HomePage() {
 
               <p
                 style={{
-                  fontSize: 23,
-                  lineHeight: 1.58,
+                  fontSize: heroTextSize,
+                  lineHeight: 1.52,
                   color: "#C3CEDD",
-                  maxWidth: 820,
-                  marginTop: 22,
+                  maxWidth: 720,
+                  marginTop: 16,
                   marginBottom: 0,
                 }}
               >
-                Built to support free trials, memberships, subscriptions, and
-                real operational workflows across vehicles, fleets, properties,
-                shops, towing, and incident documentation.
+                Designed for real-world operations across vehicles, fleets,
+                properties, shops, towing, and incident reporting.
               </p>
 
               <div
                 style={{
                   display: "flex",
-                  gap: 14,
+                  gap: 10,
                   flexWrap: "wrap",
-                  marginTop: 28,
+                  marginTop: 20,
                 }}
               >
                 <Link
-                  href="/driveproof"
+                  href="/servproof"
                   style={{
                     textDecoration: "none",
-                    padding: "15px 22px",
-                    borderRadius: 14,
+                    padding: "12px 18px",
+                    borderRadius: 12,
                     background: "linear-gradient(180deg, #24E1B4, #18D3A4)",
                     color: "#041017",
                     fontWeight: 900,
+                    fontSize: 14,
                     boxShadow:
-                      "0 18px 40px rgba(24,211,164,0.24), inset 0 1px 0 rgba(255,255,255,0.28)",
+                      "0 14px 28px rgba(24,211,164,0.22), inset 0 1px 0 rgba(255,255,255,0.24)",
                   }}
                 >
                   Explore the product family
@@ -276,33 +435,34 @@ export default function HomePage() {
 
                 <div
                   style={{
-                    padding: "15px 20px",
-                    borderRadius: 14,
+                    padding: "12px 16px",
+                    borderRadius: 12,
                     border: "1px solid rgba(255,255,255,0.12)",
                     background:
                       "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))",
                     color: "#EFF4FA",
                     fontWeight: 800,
+                    fontSize: 14,
                     boxShadow:
-                      "0 12px 28px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+                      "0 10px 22px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
                   }}
                 >
-                  Built for paid memberships and trials
+                  Subscription-ready platform
                 </div>
               </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: 14,
-                  marginTop: 28,
+                  gridTemplateColumns: statsGridColumns,
+                  gap: 10,
+                  marginTop: 20,
                 }}
               >
                 {[
                   {
                     label: "Core model",
-                    value: "Asset → Event → Inspection",
+                    value: "Asset → Inspection → Record",
                   },
                   {
                     label: "Commercial use",
@@ -316,31 +476,31 @@ export default function HomePage() {
                   <div
                     key={item.label}
                     style={{
-                      borderRadius: 18,
+                      borderRadius: 15,
                       border: "1px solid rgba(255,255,255,0.10)",
                       background:
                         "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
-                      padding: "16px 16px",
+                      padding: "13px 13px",
                       boxShadow:
-                        "0 12px 30px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+                        "0 10px 22px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)",
                     }}
                   >
                     <div
                       style={{
                         color: "#9CA3AF",
-                        fontSize: 12,
+                        fontSize: 10,
                         fontWeight: 900,
-                        letterSpacing: 1,
+                        letterSpacing: 0.9,
                         textTransform: "uppercase",
-                        marginBottom: 8,
+                        marginBottom: 6,
                       }}
                     >
                       {item.label}
                     </div>
                     <div
                       style={{
-                        fontSize: 18,
-                        lineHeight: 1.45,
+                        fontSize: isMobile ? 14 : 15,
+                        lineHeight: 1.4,
                         color: "#F3F6FB",
                         fontWeight: 800,
                       }}
@@ -355,21 +515,22 @@ export default function HomePage() {
             <div
               style={{
                 position: "relative",
-                minHeight: 560,
-                borderRadius: 28,
+                minHeight: heroImageMinHeight,
+                borderRadius: 22,
                 overflow: "hidden",
                 border: "1px solid rgba(255,255,255,0.12)",
                 boxShadow:
-                  "0 30px 80px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06)",
-                background: "#0A1422",
+                  "0 20px 50px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)",
+                background: "#081221",
               }}
             >
               <Image
-                src="/images/proof-hero.png"
-                alt="PROOF platform hero"
+                src="/images/proof-platform.png"
+                alt="PROOF Platform documentation engine"
                 fill
                 style={{
                   objectFit: "cover",
+                  objectPosition: "center",
                 }}
                 priority
               />
@@ -378,42 +539,42 @@ export default function HomePage() {
                   position: "absolute",
                   inset: 0,
                   background: `
-                    linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.58)),
-                    radial-gradient(circle at 15% 15%, rgba(24,211,164,0.18), transparent 28%),
-                    radial-gradient(circle at 85% 15%, rgba(255,138,31,0.16), transparent 24%),
-                    radial-gradient(circle at 70% 80%, rgba(125,123,255,0.18), transparent 28%)
+                    linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.48)),
+                    radial-gradient(circle at 18% 18%, rgba(24,211,164,0.16), transparent 28%),
+                    radial-gradient(circle at 82% 16%, rgba(125,123,255,0.12), transparent 24%),
+                    radial-gradient(circle at 78% 82%, rgba(255,138,31,0.12), transparent 26%)
                   `,
                 }}
               />
               <div
                 style={{
                   position: "absolute",
-                  left: 20,
-                  right: 20,
-                  bottom: 20,
+                  left: 14,
+                  right: 14,
+                  bottom: 14,
                   display: "grid",
-                  gap: 12,
+                  gap: 10,
                 }}
               >
                 <div
                   style={{
-                    borderRadius: 18,
+                    borderRadius: 15,
                     border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(7,14,24,0.66)",
+                    background: "rgba(7,14,24,0.70)",
                     backdropFilter: "blur(10px)",
-                    padding: "16px 18px",
+                    padding: "12px 14px",
                     boxShadow:
-                      "0 14px 34px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)",
+                      "0 10px 22px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.06)",
                   }}
                 >
                   <div
                     style={{
                       color: "#A5A4FF",
-                      fontSize: 12,
+                      fontSize: 10,
                       fontWeight: 900,
-                      letterSpacing: 1,
+                      letterSpacing: 0.9,
                       textTransform: "uppercase",
-                      marginBottom: 8,
+                      marginBottom: 6,
                     }}
                   >
                     Platform positioning
@@ -421,8 +582,8 @@ export default function HomePage() {
                   <div
                     style={{
                       color: "#F2F6FB",
-                      fontSize: 21,
-                      lineHeight: 1.4,
+                      fontSize: isMobile ? 15 : 17,
+                      lineHeight: 1.35,
                       fontWeight: 800,
                     }}
                   >
@@ -437,7 +598,7 @@ export default function HomePage() {
 
         <section
           style={{
-            marginBottom: 30,
+            marginBottom: 20,
           }}
         >
           <div
@@ -445,15 +606,15 @@ export default function HomePage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 16,
-              marginBottom: 18,
+              gap: 14,
+              marginBottom: 12,
               flexWrap: "wrap",
             }}
           >
             <h2
               style={{
-                fontSize: 34,
-                letterSpacing: -1,
+                fontSize: sectionTitleSize,
+                letterSpacing: -0.8,
                 margin: 0,
               }}
             >
@@ -464,31 +625,32 @@ export default function HomePage() {
               style={{
                 color: "#B8C3D1",
                 fontWeight: 700,
+                fontSize: 13,
               }}
             >
-              Documentation today is chaotic
+              Why PROOF exists
             </div>
           </div>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 18,
+              gridTemplateColumns: problemGridColumns,
+              gap: 12,
             }}
           >
             {[
               {
                 title: "Camera roll chaos",
-                text: "Critical inspection photos end up buried inside personal phone galleries mixed with family photos and everyday images.",
+                text: "Inspection photos buried in personal phone galleries.",
               },
               {
                 title: "Disputes become opinion",
-                text: 'Without structured evidence records, damage, incidents, and conditions quickly become "he said / she said" arguments.',
+                text: "Without structured records, damage becomes he-said/she-said.",
               },
               {
                 title: "No operational memory",
-                text: "Teams lose the history of vehicles, equipment, and properties because documentation was never organized properly.",
+                text: "Teams lose history because documentation was never organized.",
               },
             ].map((item) => (
               <article
@@ -496,32 +658,32 @@ export default function HomePage() {
                 style={{
                   position: "relative",
                   overflow: "hidden",
-                  borderRadius: 26,
+                  borderRadius: 20,
                   border: "1px solid rgba(255,255,255,0.10)",
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-                  boxShadow: "0 22px 60px rgba(0,0,0,0.18)",
-                  padding: 24,
+                  boxShadow: "0 16px 38px rgba(0,0,0,0.16)",
+                  padding: 18,
                 }}
               >
                 <div
                   style={{
-                    width: 70,
+                    width: 56,
                     height: 4,
                     borderRadius: 999,
                     background: "linear-gradient(180deg,#18D3A4,#24E1B4)",
-                    marginBottom: 16,
-                    boxShadow: "0 0 18px rgba(24,211,164,0.35)",
+                    marginBottom: 12,
+                    boxShadow: "0 0 14px rgba(24,211,164,0.32)",
                   }}
                 />
 
                 <h3
                   style={{
-                    fontSize: 28,
-                    lineHeight: 1.05,
-                    letterSpacing: -0.8,
+                    fontSize: isMobile ? 20 : 22,
+                    lineHeight: 1.06,
+                    letterSpacing: -0.6,
                     marginTop: 0,
-                    marginBottom: 10,
+                    marginBottom: 8,
                   }}
                 >
                   {item.title}
@@ -530,8 +692,8 @@ export default function HomePage() {
                 <p
                   style={{
                     color: "#C5CFDB",
-                    fontSize: 17,
-                    lineHeight: 1.7,
+                    fontSize: isMobile ? 14 : 15,
+                    lineHeight: 1.55,
                     margin: 0,
                   }}
                 >
@@ -544,7 +706,7 @@ export default function HomePage() {
 
         <section
           style={{
-            marginBottom: 34,
+            marginBottom: 22,
           }}
         >
           <div
@@ -552,15 +714,15 @@ export default function HomePage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 16,
-              marginBottom: 18,
+              gap: 14,
+              marginBottom: 12,
               flexWrap: "wrap",
             }}
           >
             <h2
               style={{
-                fontSize: 34,
-                letterSpacing: -1,
+                fontSize: sectionTitleSize,
+                letterSpacing: -0.8,
                 margin: 0,
               }}
             >
@@ -571,6 +733,7 @@ export default function HomePage() {
               style={{
                 color: "#B8C3D1",
                 fontWeight: 700,
+                fontSize: 13,
               }}
             >
               One system powering every product
@@ -579,82 +742,52 @@ export default function HomePage() {
 
           <div
             style={{
-              borderRadius: 30,
+              borderRadius: 24,
               border: "1px solid rgba(255,255,255,0.10)",
               background:
                 "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-              boxShadow: "0 28px 80px rgba(0,0,0,0.20)",
-              padding: 32,
+              boxShadow: "0 18px 46px rgba(0,0,0,0.18)",
+              padding: isMobile ? 14 : 20,
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(5, minmax(0,1fr))",
-                gap: 18,
+                gridTemplateColumns: engineGridColumns,
+                gap: 12,
               }}
             >
-              {[
-                {
-                  title: "Asset",
-                  text: "A vehicle, machine, property, or object being documented.",
-                },
-                {
-                  title: "Event",
-                  text: "A trip, rental, assignment, stay, tow, service, or incident moment.",
-                },
-                {
-                  title: "Inspection",
-                  text: "Structured documentation capturing the condition at that moment.",
-                },
-                {
-                  title: "Evidence",
-                  text: "Photos, notes, and supporting media tied to the inspection.",
-                },
-                {
-                  title: "Permanent Record",
-                  text: "A time-ordered history stored safely outside personal phones.",
-                },
-              ].map((item, index) => (
+              {engineCards.map((item) => (
                 <div
                   key={item.title}
                   style={{
                     position: "relative",
                     overflow: "hidden",
-                    borderRadius: 22,
+                    borderRadius: 18,
                     border: "1px solid rgba(255,255,255,0.10)",
                     background:
                       "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
-                    padding: 22,
+                    padding: 17,
                     boxShadow:
-                      "0 18px 46px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.06)",
+                      "0 12px 30px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
                   }}
                 >
                   <div
                     style={{
-                      width: 64,
+                      width: 52,
                       height: 4,
                       borderRadius: 999,
-                      background:
-                        index === 0
-                          ? "#18D3A4"
-                          : index === 1
-                          ? "#7D7BFF"
-                          : index === 2
-                          ? "#FF8A1F"
-                          : index === 3
-                          ? "#FACC15"
-                          : "#EF4444",
-                      marginBottom: 14,
+                      background: item.accent,
+                      marginBottom: 10,
                     }}
                   />
 
                   <h3
                     style={{
-                      fontSize: 24,
+                      fontSize: isMobile ? 18 : 19,
                       marginTop: 0,
-                      marginBottom: 10,
-                      letterSpacing: -0.6,
+                      marginBottom: 8,
+                      letterSpacing: -0.4,
                     }}
                   >
                     {item.title}
@@ -662,9 +795,9 @@ export default function HomePage() {
 
                   <p
                     style={{
-                      fontSize: 16,
+                      fontSize: 14,
                       color: "#C5CFDB",
-                      lineHeight: 1.65,
+                      lineHeight: 1.5,
                       margin: 0,
                     }}
                   >
@@ -676,21 +809,21 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section style={{ marginBottom: 20 }}>
+        <section style={{ marginBottom: 14 }}>
           <div
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 16,
-              marginBottom: 16,
+              gap: 14,
+              marginBottom: 12,
               flexWrap: "wrap",
             }}
           >
             <h2
               style={{
-                fontSize: 34,
-                letterSpacing: -1,
+                fontSize: sectionTitleSize,
+                letterSpacing: -0.8,
                 margin: 0,
               }}
             >
@@ -701,215 +834,223 @@ export default function HomePage() {
               style={{
                 color: "#B8C3D1",
                 fontWeight: 700,
+                fontSize: 13,
               }}
             >
-              Live products in the PROOF family
+              Live product family
             </div>
           </div>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 18,
+              gridTemplateColumns: liveGridColumns,
+              gap: 12,
+              alignItems: "stretch",
+              marginBottom: 14,
             }}
           >
-            {liveProducts.map((product) => (
-              <article
-                key={product.key}
-                style={{
-                  position: "relative",
-                  overflow: "hidden",
-                  borderRadius: 28,
-                  border: `1px solid ${product.theme.border}`,
-                  background: product.theme.heroGradient,
-                  boxShadow: `0 24px 70px ${product.theme.surfaceGlow}`,
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: `
-                      radial-gradient(circle at top left, ${product.theme.spotlight}, transparent 28%),
-                      linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0))
-                    `,
-                    pointerEvents: "none",
-                  }}
-                />
+            {liveProducts.map((product) => {
+              const theme = productThemeMap[product.id] ?? {
+                primary: "#18D3A4",
+                border: "rgba(24,211,164,0.26)",
+                heroGradient:
+                  "linear-gradient(180deg, rgba(24,211,164,0.14), rgba(255,255,255,0.04))",
+                surfaceGlow: "rgba(24,211,164,0.16)",
+                spotlight: "rgba(24,211,164,0.18)",
+                heroGlow: "rgba(24,211,164,0.24)",
+              };
 
-                <div style={{ position: "relative", padding: 22 }}>
+              return (
+                <article
+                  key={product.id}
+                  style={{
+                    position: "relative",
+                    overflow: "hidden",
+                    borderRadius: 20,
+                    border: `1px solid ${theme.border}`,
+                    background: theme.heroGradient,
+                    boxShadow: `0 16px 42px ${theme.surfaceGlow}`,
+                  }}
+                >
                   <div
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "8px 12px",
-                      borderRadius: 999,
-                      marginBottom: 18,
-                      border: `1px solid ${product.theme.border}`,
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
-                      color: product.theme.primary,
-                      fontWeight: 900,
-                      boxShadow: `0 10px 24px ${product.theme.surfaceGlow}`,
+                      position: "absolute",
+                      inset: 0,
+                      background: `
+                        radial-gradient(circle at top left, ${theme.spotlight}, transparent 28%),
+                        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0))
+                      `,
+                      pointerEvents: "none",
                     }}
-                  >
-                    {product.name}
-                  </div>
+                  />
 
                   <div
                     style={{
                       position: "relative",
-                      height: 220,
-                      borderRadius: 18,
-                      overflow: "hidden",
-                      border: `1px solid ${product.theme.border}`,
-                      marginBottom: 18,
-                      boxShadow:
-                        "0 16px 40px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.05)",
-                      background: "#0A1422",
+                      padding: 16,
+                      display: "flex",
+                      flexDirection: "column",
                     }}
                   >
-                    <Image
-                      src={liveProductImageMap[product.key]}
-                      alt={product.name}
-                      fill
-                      style={{ objectFit: "cover" }}
-                    />
                     <div
                       style={{
-                        position: "absolute",
-                        inset: 0,
-                        background: `
-                          linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.42)),
-                          radial-gradient(circle at top left, ${product.theme.spotlight}, transparent 30%)
-                        `,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        marginBottom: 12,
+                        border: `1px solid ${theme.border}`,
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
+                        color: theme.primary,
+                        fontWeight: 900,
+                        fontSize: 12,
+                        boxShadow: `0 8px 18px ${theme.surfaceGlow}`,
+                        alignSelf: "flex-start",
                       }}
-                    />
-                  </div>
+                    >
+                      {product.name}
+                    </div>
 
-                  <h3
-                    style={{
-                      fontSize: 44,
-                      lineHeight: 1,
-                      marginTop: 0,
-                      marginBottom: 12,
-                      letterSpacing: -1.4,
-                    }}
-                  >
-                    {product.name}
-                  </h3>
-
-                  <p
-                    style={{
-                      color: "#D4DDEA",
-                      lineHeight: 1.7,
-                      fontSize: 17,
-                      minHeight: 92,
-                      marginBottom: 18,
-                    }}
-                  >
-                    {liveProductDescriptions[product.key]}
-                  </p>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 12,
-                      marginBottom: 20,
-                    }}
-                  >
-                    {liveProductBullets[product.key].map((item) => (
+                    <div
+                      style={{
+                        position: "relative",
+                        height: isMobile ? 150 : isTablet ? 165 : 170,
+                        borderRadius: 14,
+                        overflow: "hidden",
+                        border: `1px solid ${theme.border}`,
+                        marginBottom: 12,
+                        boxShadow:
+                          "0 12px 28px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.05)",
+                        background: "#0A1422",
+                      }}
+                    >
+                      <Image
+                        src={liveProductImageMap[product.id]}
+                        alt={product.name}
+                        fill
+                        style={{ objectFit: "cover" }}
+                      />
                       <div
-                        key={item}
                         style={{
-                          position: "relative",
-                          overflow: "hidden",
-                          borderRadius: 16,
-                          border: `1px solid ${product.theme.border}`,
-                          background:
-                            "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
-                          padding: "14px 16px 14px 20px",
-                          color: "#F2F6FB",
-                          fontWeight: 800,
-                          boxShadow:
-                            "0 12px 28px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+                          position: "absolute",
+                          inset: 0,
+                          background: `
+                            linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.42)),
+                            radial-gradient(circle at top left, ${theme.spotlight}, transparent 30%)
+                          `,
                         }}
-                      >
-                        <span
+                      />
+                    </div>
+
+                    <h3
+                      style={{
+                        fontSize: productTitleSize,
+                        lineHeight: 1,
+                        marginTop: 0,
+                        marginBottom: 9,
+                        letterSpacing: -1,
+                      }}
+                    >
+                      {product.name}
+                    </h3>
+
+                    <p
+                      style={{
+                        color: "#D4DDEA",
+                        lineHeight: 1.55,
+                        fontSize: isMobile ? 14 : 15,
+                        marginTop: 0,
+                        marginBottom: 12,
+                        minHeight: isMobile ? "auto" : 64,
+                      }}
+                    >
+                      {liveProductDescriptions[product.id] ?? product.description}
+                    </p>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 8,
+                        marginBottom: 12,
+                      }}
+                    >
+                      {(liveProductBullets[product.id] ?? []).map((item) => (
+                        <div
+                          key={item}
                           style={{
-                            position: "absolute",
-                            left: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: 5,
-                            background: product.theme.primary,
-                            boxShadow: `0 0 18px ${product.theme.heroGlow}`,
+                            position: "relative",
+                            overflow: "hidden",
+                            borderRadius: 12,
+                            border: `1px solid ${theme.border}`,
+                            background:
+                              "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
+                            padding: "11px 12px 11px 16px",
+                            color: "#F2F6FB",
+                            fontWeight: 800,
+                            fontSize: 13,
+                            boxShadow:
+                              "0 8px 20px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
                           }}
-                        />
-                        {item}
-                      </div>
-                    ))}
+                        >
+                          <span
+                            style={{
+                              position: "absolute",
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: 4,
+                              background: theme.primary,
+                              boxShadow: `0 0 14px ${theme.heroGlow}`,
+                            }}
+                          />
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+
+                    <Link
+                      href={`/${product.id}`}
+                      style={{
+                        display: "inline-block",
+                        textDecoration: "none",
+                        padding: "11px 14px",
+                        borderRadius: 12,
+                        background: theme.primary,
+                        color: "#081018",
+                        fontWeight: 900,
+                        fontSize: 14,
+                        boxShadow: `0 12px 24px ${theme.heroGlow}`,
+                        alignSelf: "flex-start",
+                      }}
+                    >
+                      View {product.name}
+                    </Link>
                   </div>
-
-                  <Link
-                    href={`/${product.key}`}
-                    style={{
-                      display: "inline-block",
-                      textDecoration: "none",
-                      padding: "14px 18px",
-                      borderRadius: 14,
-                      background: product.theme.primary,
-                      color: "#081018",
-                      fontWeight: 900,
-                      boxShadow: `0 18px 36px ${product.theme.heroGlow}`,
-                    }}
-                  >
-                    View {product.name}
-                  </Link>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
-        </section>
 
-        <section style={{ marginBottom: 30 }}>
-          <div
+          <p
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 16,
-              marginBottom: 16,
-              flexWrap: "wrap",
+              color: "#C2CCD8",
+              fontSize: isMobile ? 14 : 15,
+              lineHeight: 1.55,
+              marginTop: 0,
+              marginBottom: 12,
             }}
           >
-            <h2
-              style={{
-                fontSize: 34,
-                letterSpacing: -1,
-                margin: 0,
-              }}
-            >
-              Coming soon
-            </h2>
-
-            <div
-              style={{
-                color: "#B8C3D1",
-                fontWeight: 700,
-              }}
-            >
-              Next divisions planned for the PROOF ecosystem — featuring
-              ClaimPROOF reporting
-            </div>
-          </div>
+            Next divisions planned for the PROOF ecosystem — featuring
+            ClaimPROOF reporting.
+          </p>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 18,
+              gridTemplateColumns: comingSoonGridColumns,
+              gap: 12,
             }}
           >
             {comingSoonProducts.map((product) => (
@@ -918,12 +1059,12 @@ export default function HomePage() {
                 style={{
                   position: "relative",
                   overflow: "hidden",
-                  borderRadius: 28,
+                  borderRadius: 20,
                   border: `1px solid ${product.border}`,
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-                  boxShadow: `0 22px 60px ${product.glow}`,
-                  padding: 24,
+                  boxShadow: `0 16px 40px ${product.glow}`,
+                  padding: 18,
                 }}
               >
                 <div
@@ -941,8 +1082,8 @@ export default function HomePage() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      gap: 12,
-                      marginBottom: 18,
+                      gap: 10,
+                      marginBottom: 12,
                       flexWrap: "wrap",
                     }}
                   >
@@ -950,14 +1091,15 @@ export default function HomePage() {
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        padding: "8px 12px",
+                        padding: "6px 10px",
                         borderRadius: 999,
                         border: `1px solid ${product.border}`,
                         background:
                           "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
                         color: product.color,
                         fontWeight: 900,
-                        boxShadow: `0 10px 24px ${product.glow}`,
+                        fontSize: 12,
+                        boxShadow: `0 8px 18px ${product.glow}`,
                       }}
                     >
                       {product.name}
@@ -965,14 +1107,14 @@ export default function HomePage() {
 
                     <div
                       style={{
-                        padding: "7px 11px",
+                        padding: "6px 9px",
                         borderRadius: 999,
                         border: "1px solid rgba(255,255,255,0.10)",
                         background: "rgba(255,255,255,0.05)",
                         color: "#F8FAFC",
-                        fontSize: 12,
+                        fontSize: 10,
                         fontWeight: 900,
-                        letterSpacing: 0.8,
+                        letterSpacing: 0.7,
                         textTransform: "uppercase",
                       }}
                     >
@@ -982,11 +1124,11 @@ export default function HomePage() {
 
                   <h3
                     style={{
-                      fontSize: 40,
+                      fontSize: comingSoonTitleSize,
                       lineHeight: 1,
-                      letterSpacing: -1.4,
+                      letterSpacing: -1,
                       marginTop: 0,
-                      marginBottom: 14,
+                      marginBottom: 10,
                     }}
                   >
                     {product.name}
@@ -995,10 +1137,10 @@ export default function HomePage() {
                   <p
                     style={{
                       color: "#D4DDEA",
-                      lineHeight: 1.7,
-                      fontSize: 17,
-                      minHeight: 96,
-                      marginBottom: 18,
+                      lineHeight: 1.55,
+                      fontSize: isMobile ? 14 : 15,
+                      minHeight: isMobile ? "auto" : 78,
+                      marginBottom: 12,
                     }}
                   >
                     {product.description}
@@ -1007,7 +1149,7 @@ export default function HomePage() {
                   <div
                     style={{
                       display: "grid",
-                      gap: 12,
+                      gap: 8,
                     }}
                   >
                     {product.bullets.map((item) => (
@@ -1016,15 +1158,16 @@ export default function HomePage() {
                         style={{
                           position: "relative",
                           overflow: "hidden",
-                          borderRadius: 16,
+                          borderRadius: 12,
                           border: `1px solid ${product.border}`,
                           background:
                             "linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.04))",
-                          padding: "14px 16px 14px 20px",
+                          padding: "11px 12px 11px 16px",
                           color: "#F2F6FB",
                           fontWeight: 800,
+                          fontSize: 13,
                           boxShadow:
-                            "0 12px 28px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
+                            "0 8px 20px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
                         }}
                       >
                         <span
@@ -1033,9 +1176,9 @@ export default function HomePage() {
                             left: 0,
                             top: 0,
                             bottom: 0,
-                            width: 5,
+                            width: 4,
                             background: product.color,
-                            boxShadow: `0 0 18px ${product.glow}`,
+                            boxShadow: `0 0 14px ${product.glow}`,
                           }}
                         />
                         {item}
@@ -1050,19 +1193,19 @@ export default function HomePage() {
 
         <section
           style={{
-            borderRadius: 30,
+            borderRadius: 24,
             border: "1px solid rgba(255,255,255,0.10)",
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-            boxShadow: "0 22px 70px rgba(0,0,0,0.20)",
-            padding: 28,
+            boxShadow: "0 18px 46px rgba(0,0,0,0.18)",
+            padding: isMobile ? 16 : 20,
           }}
         >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1.06fr 0.94fr",
-              gap: 22,
+              gridTemplateColumns: finalGridColumns,
+              gap: 16,
               alignItems: "start",
             }}
           >
@@ -1070,11 +1213,11 @@ export default function HomePage() {
               <div
                 style={{
                   color: "#9CA3AF",
-                  fontSize: 12,
+                  fontSize: 10,
                   fontWeight: 900,
-                  letterSpacing: 1,
+                  letterSpacing: 0.8,
                   textTransform: "uppercase",
-                  marginBottom: 10,
+                  marginBottom: 8,
                 }}
               >
                 Final direction
@@ -1082,10 +1225,10 @@ export default function HomePage() {
 
               <h2
                 style={{
-                  fontSize: 42,
-                  letterSpacing: -1.4,
+                  fontSize: finalTitleSize,
+                  letterSpacing: -1,
                   marginTop: 0,
-                  marginBottom: 14,
+                  marginBottom: 10,
                 }}
               >
                 Built as a product ecosystem, not a single feature app.
@@ -1094,21 +1237,21 @@ export default function HomePage() {
               <p
                 style={{
                   color: "#C2CCD8",
-                  fontSize: 18,
-                  lineHeight: 1.7,
+                  fontSize: isMobile ? 14 : 15,
+                  lineHeight: 1.55,
                   margin: 0,
                 }}
               >
-                The platform now shows a credible present-day offering and a
-                clear next-wave roadmap, including TowPROOF, IncidentPROOF, and
-                ShopPROOF, all featuring ClaimPROOF reporting.
+                The platform now presents a credible live product family and a
+                clear next-wave roadmap including TowPROOF, IncidentPROOF, and
+                ShopPROOF.
               </p>
             </div>
 
             <div
               style={{
                 display: "grid",
-                gap: 12,
+                gap: 8,
               }}
             >
               {[
@@ -1121,15 +1264,16 @@ export default function HomePage() {
                   style={{
                     position: "relative",
                     overflow: "hidden",
-                    borderRadius: 16,
+                    borderRadius: 12,
                     border: "1px solid rgba(255,255,255,0.10)",
                     background:
                       "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
-                    padding: "16px 16px 16px 20px",
+                    padding: "12px 12px 12px 16px",
                     fontWeight: 800,
+                    fontSize: 13,
                     color: "#EEF2F7",
                     boxShadow:
-                      "0 10px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.07)",
+                      "0 8px 18px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.07)",
                   }}
                 >
                   <span
@@ -1138,13 +1282,13 @@ export default function HomePage() {
                       left: 0,
                       top: 0,
                       bottom: 0,
-                      width: 5,
+                      width: 4,
                       background:
                         index === 0
                           ? "linear-gradient(180deg, #18D3A4, #24E1B4)"
                           : index === 1
-                          ? "linear-gradient(180deg, #FACC15, #FDE047)"
-                          : "linear-gradient(180deg, #7D7BFF, #A5A4FF)",
+                            ? "linear-gradient(180deg, #FACC15, #FDE047)"
+                            : "linear-gradient(180deg, #7D7BFF, #A5A4FF)",
                     }}
                   />
                   {item}
