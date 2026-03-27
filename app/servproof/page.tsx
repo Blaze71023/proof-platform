@@ -221,7 +221,8 @@ export default function ServProofOverviewPage() {
   function loadAll() {
     try {
       const parsedAssets = readFirstAvailableArray<Asset>(ASSET_STORAGE_KEYS);
-      const parsedRecords = readFirstAvailableArray<RecordEntry>(RECORD_STORAGE_KEYS);
+      const parsedRecords =
+        readFirstAvailableArray<RecordEntry>(RECORD_STORAGE_KEYS);
 
       setAssets(Array.isArray(parsedAssets) ? parsedAssets : []);
       setRecords(Array.isArray(parsedRecords) ? parsedRecords : []);
@@ -270,7 +271,10 @@ export default function ServProofOverviewPage() {
         ...record,
         location: record.location || "",
         photos: Array.isArray(record.photos) ? record.photos : [],
-        status: record.status === "issue" ? "issue" : "working",
+        status:
+          record.status === "issue" || record.status === "working"
+            ? record.status
+            : "working",
         priority:
           record.priority === "high"
             ? "high"
@@ -389,8 +393,12 @@ export default function ServProofOverviewPage() {
       selectedLocation === "All Locations"
         ? USER_ROLE === "primary"
           ? normalizedRecords
-          : normalizedRecords.filter((record) => filteredAssetIds.has(record.assetId))
-        : normalizedRecords.filter((record) => filteredAssetIds.has(record.assetId));
+          : normalizedRecords.filter((record) =>
+              filteredAssetIds.has(record.assetId)
+            )
+        : normalizedRecords.filter((record) =>
+            filteredAssetIds.has(record.assetId)
+          );
 
     return [...sourceRecords]
       .sort(
@@ -434,17 +442,25 @@ export default function ServProofOverviewPage() {
               record: {
                 id: `derived-${asset.id}`,
                 assetId: asset.id,
-                note: asset.notes?.trim() || "Equipment flagged from operations center.",
+                note:
+                  asset.notes?.trim() ||
+                  "Equipment flagged from operations center.",
                 status: "issue",
-                priority: asset.status === "repair-scheduled" ? "medium" : "high",
-                createdAt: asset.updatedAt || asset.createdAt || new Date().toISOString(),
+                priority:
+                  asset.status === "repair-scheduled" ? "medium" : "high",
+                createdAt:
+                  asset.updatedAt ||
+                  asset.createdAt ||
+                  new Date().toISOString(),
                 photos: [],
                 location: asset.location,
                 reportedBy: "",
                 assignedTech: "",
                 scheduledFor: "",
                 repairStatus:
-                  asset.status === "repair-scheduled" ? "scheduled" : "in-progress",
+                  asset.status === "repair-scheduled"
+                    ? "scheduled"
+                    : "in-progress",
               } as RecordEntry,
             }
           : null;
@@ -860,7 +876,9 @@ export default function ServProofOverviewPage() {
                   onClick={openAddEquipmentModal}
                   style={primaryButtonStyle}
                 >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+                  >
                     <Plus size={15} strokeWidth={2.6} />
                     Add Equipment
                   </span>
@@ -871,7 +889,9 @@ export default function ServProofOverviewPage() {
                   onClick={() => openRecordModal()}
                   style={secondaryButtonStyle}
                 >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+                  >
                     <Wrench size={15} strokeWidth={2.6} />
                     Schedule / Log Repair
                   </span>
@@ -2571,7 +2591,9 @@ function EquipmentRow({
             }}
           >
             {asset.modelNumber?.trim() || "No Model Number"}
-            {asset.serialNumber?.trim() ? ` • Serial ${asset.serialNumber.trim()}` : ""}
+            {asset.serialNumber?.trim()
+              ? ` • Serial ${asset.serialNumber.trim()}`
+              : ""}
             {asset.location?.trim() ? ` • ${asset.location.trim()}` : ""}
           </div>
         </div>
