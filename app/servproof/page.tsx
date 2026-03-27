@@ -266,36 +266,36 @@ export default function ServProofOverviewPage() {
   );
 
   const normalizedRecords = useMemo(
-    () =>
-      records.map((record) => ({
-        ...record,
-        location: record.location || "",
-        photos: Array.isArray(record.photos) ? record.photos : [],
-        status:
-          record.status === "issue" || record.status === "working"
-            ? record.status
-            : "working",
-        priority:
-          record.priority === "high"
-            ? "high"
-            : record.priority === "medium"
-              ? "medium"
-              : "low",
-        reportedBy:
-          typeof record.reportedBy === "string" ? record.reportedBy : "",
-        assignedTech:
-          typeof record.assignedTech === "string" ? record.assignedTech : "",
-        scheduledFor:
-          typeof record.scheduledFor === "string" ? record.scheduledFor : "",
-        repairStatus:
-          record.repairStatus === "in-progress"
-            ? "in-progress"
-            : record.repairStatus === "completed"
-              ? "completed"
-              : "scheduled",
-      })),
-    [records]
-  );
+  (): RecordEntry[] =>
+    records.map((record) => ({
+      ...record,
+      location: record.location || "",
+      photos: Array.isArray(record.photos) ? record.photos : [],
+      status:
+        record.status === "issue" || record.status === "working"
+          ? record.status
+          : "working",
+      priority:
+        record.priority === "high"
+          ? "high"
+          : record.priority === "medium"
+            ? "medium"
+            : "low",
+      reportedBy:
+        typeof record.reportedBy === "string" ? record.reportedBy : "",
+      assignedTech:
+        typeof record.assignedTech === "string" ? record.assignedTech : "",
+      scheduledFor:
+        typeof record.scheduledFor === "string" ? record.scheduledFor : "",
+      repairStatus:
+        record.repairStatus === "in-progress"
+          ? "in-progress"
+          : record.repairStatus === "completed"
+            ? "completed"
+            : "scheduled",
+    })),
+  [records]
+);
 
   const locationOptions = LOCATION_OPTIONS as readonly string[];
 
@@ -631,21 +631,18 @@ export default function ServProofOverviewPage() {
       repairStatus: recordDraft.repairStatus,
     };
 
-    const nextRecords = [issueRecord, ...records];
-    persistRecords(nextRecords);
-
-    const nextAssets = assets.map((item) =>
-      item.id === asset.id
-        ? {
-            ...item,
-            status:
-              recordDraft.repairStatus === "scheduled"
-                ? "repair-scheduled"
-                : "issue",
-            updatedAt: new Date().toISOString(),
-          }
-        : item
-    );
+    const nextAssets: Asset[] = assets.map((item) =>
+  item.id === asset.id
+    ? {
+        ...item,
+        status:
+          recordDraft.repairStatus === "scheduled"
+            ? ("repair-scheduled" as AssetStatus)
+            : ("issue" as AssetStatus),
+        updatedAt: new Date().toISOString(),
+      }
+    : item
+);
 
     persistAssets(nextAssets);
     setRecordError("");
