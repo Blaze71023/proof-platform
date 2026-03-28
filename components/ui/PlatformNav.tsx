@@ -52,24 +52,24 @@ export default function PlatformNav() {
           </Link>
 
           <Link
-            href="/driveproof"
+            href="/shopproof"
             style={navItem}
           >
-            DrivePROOF
+            ShopPROOF
           </Link>
 
           <Link
-            href="/fleetproof"
+            href="/towproof"
             style={navItem}
           >
-            FleetPROOF
+            TowPROOF
           </Link>
 
           <Link
-            href="/rentproof"
+            href="/servproof"
             style={navItem}
           >
-            RentPROOF
+            ServPROOF
           </Link>
 
           <Link

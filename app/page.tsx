@@ -1,23 +1,110 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getProductConfig } from "@/lib/products/registry";
 
-const liveProducts = [
-  getProductConfig("servproof"),
-  getProductConfig("driveproof"),
-  getProductConfig("fleetproof"),
-  getProductConfig("rentproof"),
-].filter(Boolean) as ReturnType<typeof getProductConfig>[];
-
-const liveProductImageMap: Record<string, string> = {
-  servproof: "/images/equipment-proof.jpg",
-  driveproof: "/images/driveproof-inspection.png",
-  fleetproof: "/images/fleetproof-equipment.jpg",
-  rentproof: "/images/rentproof-property.jpeg",
+type ProductCard = {
+  id: string;
+  name: string;
+  href?: string;
+  image: string;
+  description: string;
+  bullets: string[];
+  status: string;
+  disabled?: boolean;
 };
+
+const availableProducts: ProductCard[] = [
+  {
+    id: "shopproof",
+    name: "ShopPROOF",
+    href: "/shopproof",
+    image: "/images/shopproof-dashboard.png",
+    description:
+      "Repair shop documentation for service intake, workflow visibility, and customer vehicle accountability.",
+    bullets: [
+      "Vehicle intake and documentation workflow",
+      "Service records and visual proof structure",
+      "Active build with real system foundation",
+    ],
+    status: "Active Build",
+  },
+  {
+    id: "towproof",
+    name: "TowPROOF",
+    href: "/towproof",
+    image: "/images/towproof-hero.png",
+    description:
+      "Tow and recovery documentation for hook-up, transport, destination proof, and operator accountability.",
+    bullets: [
+      "Tow intake and hook-up documentation",
+      "Destination and release accountability",
+      "Preview dashboard direction is established",
+    ],
+    status: "Preview Build",
+    disabled: false,
+  },
+  {
+    id: "servproof",
+    name: "ServPROOF",
+    href: "/servproof",
+    image: "/images/equipment-proof.jpg",
+    description:
+      "Restaurant equipment service documentation for maintenance issues, failures, repairs, and multi-location accountability.",
+    bullets: [
+      "Restaurant equipment condition capture",
+      "Maintenance and failure reporting",
+      "Multi-location service accountability",
+    ],
+    status: "Live",
+  },
+];
+
+const comingSoonProducts: ProductCard[] = [
+  {
+    id: "driveproof",
+    name: "DrivePROOF",
+    image: "/images/driveproof-inspection.png",
+    description:
+      "Professional vehicle documentation for pickups, dropoffs, damage capture, and guest accountability.",
+    bullets: [
+      "Vehicle condition capture",
+      "Pickup and dropoff inspections",
+      "Claims and damage evidence",
+    ],
+    status: "Coming Soon",
+    disabled: true,
+  },
+  {
+    id: "rentproof",
+    name: "RentPROOF",
+    image: "/images/rentproof-property.jpeg",
+    description:
+      "Premium property documentation for stays, guest incidents, and room condition capture.",
+    bullets: [
+      "Property turnover records",
+      "Guest incident documentation",
+      "Cleaner and host coordination",
+    ],
+    status: "Coming Soon",
+    disabled: true,
+  },
+  {
+    id: "fleetproof",
+    name: "FleetPROOF",
+    image: "/images/fleetproof-equipment.jpg",
+    description:
+      "Inspection workflows for equipment, assignments, maintenance visibility, and service accountability.",
+    bullets: [
+      "Heavy equipment accountability",
+      "Pre-trip and service workflows",
+      "Downtime and maintenance visibility",
+    ],
+    status: "Coming Soon",
+    disabled: true,
+  },
+];
 
 const productThemeMap: Record<
   string,
@@ -28,8 +115,43 @@ const productThemeMap: Record<
     surfaceGlow: string;
     spotlight: string;
     heroGlow: string;
+    button: string;
+    buttonText: string;
+    statusBg: string;
+    statusBorder: string;
+    statusText: string;
   }
 > = {
+  shopproof: {
+    primary: "#3B82F6",
+    border: "rgba(59,130,246,0.26)",
+    heroGradient:
+      "linear-gradient(180deg, rgba(59,130,246,0.14), rgba(255,255,255,0.04))",
+    surfaceGlow: "rgba(59,130,246,0.16)",
+    spotlight: "rgba(59,130,246,0.18)",
+    heroGlow: "rgba(59,130,246,0.24)",
+    button: "linear-gradient(180deg, #60A5FA, #3B82F6)",
+    buttonText: "#06111D",
+    statusBg:
+      "linear-gradient(180deg, rgba(59,130,246,0.18), rgba(59,130,246,0.10))",
+    statusBorder: "rgba(59,130,246,0.26)",
+    statusText: "#93C5FD",
+  },
+  towproof: {
+    primary: "#FACC15",
+    border: "rgba(250,204,21,0.26)",
+    heroGradient:
+      "linear-gradient(180deg, rgba(250,204,21,0.14), rgba(255,255,255,0.04))",
+    surfaceGlow: "rgba(250,204,21,0.16)",
+    spotlight: "rgba(250,204,21,0.18)",
+    heroGlow: "rgba(250,204,21,0.22)",
+    button: "linear-gradient(180deg, #FCD34D, #FACC15)",
+    buttonText: "#1B1603",
+    statusBg:
+      "linear-gradient(180deg, rgba(250,204,21,0.18), rgba(250,204,21,0.10))",
+    statusBorder: "rgba(250,204,21,0.26)",
+    statusText: "#FDE68A",
+  },
   servproof: {
     primary: "#18D3A4",
     border: "rgba(24,211,164,0.26)",
@@ -38,6 +160,12 @@ const productThemeMap: Record<
     surfaceGlow: "rgba(24,211,164,0.16)",
     spotlight: "rgba(24,211,164,0.18)",
     heroGlow: "rgba(24,211,164,0.24)",
+    button: "linear-gradient(180deg, #24E1B4, #18D3A4)",
+    buttonText: "#041017",
+    statusBg:
+      "linear-gradient(180deg, rgba(24,211,164,0.18), rgba(24,211,164,0.10))",
+    statusBorder: "rgba(24,211,164,0.26)",
+    statusText: "#8CF0D1",
   },
   driveproof: {
     primary: "#7D7BFF",
@@ -47,15 +175,13 @@ const productThemeMap: Record<
     surfaceGlow: "rgba(125,123,255,0.16)",
     spotlight: "rgba(125,123,255,0.18)",
     heroGlow: "rgba(125,123,255,0.24)",
-  },
-  fleetproof: {
-    primary: "#FF8A1F",
-    border: "rgba(255,138,31,0.26)",
-    heroGradient:
-      "linear-gradient(180deg, rgba(255,138,31,0.14), rgba(255,255,255,0.04))",
-    surfaceGlow: "rgba(255,138,31,0.16)",
-    spotlight: "rgba(255,138,31,0.18)",
-    heroGlow: "rgba(255,138,31,0.24)",
+    button:
+      "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
+    buttonText: "#DDE6F3",
+    statusBg:
+      "linear-gradient(180deg, rgba(125,123,255,0.18), rgba(125,123,255,0.10))",
+    statusBorder: "rgba(125,123,255,0.26)",
+    statusText: "#BCBAFF",
   },
   rentproof: {
     primary: "#38BDF8",
@@ -65,41 +191,30 @@ const productThemeMap: Record<
     surfaceGlow: "rgba(56,189,248,0.16)",
     spotlight: "rgba(56,189,248,0.18)",
     heroGlow: "rgba(56,189,248,0.24)",
+    button:
+      "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
+    buttonText: "#DDE6F3",
+    statusBg:
+      "linear-gradient(180deg, rgba(56,189,248,0.18), rgba(56,189,248,0.10))",
+    statusBorder: "rgba(56,189,248,0.26)",
+    statusText: "#7DD3FC",
   },
-};
-
-const liveProductDescriptions: Record<string, string> = {
-  servproof:
-    "Restaurant equipment service documentation for maintenance issues, failures, repairs, and multi-location accountability.",
-  driveproof:
-    "Professional vehicle documentation for pickups, dropoffs, damage capture, and guest accountability.",
-  fleetproof:
-    "Inspection workflows for equipment, assignments, maintenance visibility, and service accountability.",
-  rentproof:
-    "Premium property documentation for stays, guest incidents, and room condition capture.",
-};
-
-const liveProductBullets: Record<string, string[]> = {
-  servproof: [
-    "Restaurant equipment condition capture",
-    "Maintenance and failure reporting",
-    "Multi-location service accountability",
-  ],
-  driveproof: [
-    "Vehicle condition capture",
-    "Pickup and dropoff inspections",
-    "Claims and damage evidence",
-  ],
-  fleetproof: [
-    "Heavy equipment accountability",
-    "Pre-trip and service workflows",
-    "Downtime and maintenance visibility",
-  ],
-  rentproof: [
-    "Property turnover records",
-    "Guest incident documentation",
-    "Cleaner and host coordination",
-  ],
+  fleetproof: {
+    primary: "#FF8A1F",
+    border: "rgba(255,138,31,0.26)",
+    heroGradient:
+      "linear-gradient(180deg, rgba(255,138,31,0.14), rgba(255,255,255,0.04))",
+    surfaceGlow: "rgba(255,138,31,0.16)",
+    spotlight: "rgba(255,138,31,0.18)",
+    heroGlow: "rgba(255,138,31,0.24)",
+    button:
+      "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
+    buttonText: "#DDE6F3",
+    statusBg:
+      "linear-gradient(180deg, rgba(255,138,31,0.18), rgba(255,138,31,0.10))",
+    statusBorder: "rgba(255,138,31,0.26)",
+    statusText: "#FDBA74",
+  },
 };
 
 const engineCards = [
@@ -117,48 +232,6 @@ const engineCards = [
     title: "Record",
     text: "A permanent history of inspections stored safely outside personal phones.",
     accent: "#FF8A1F",
-  },
-] as const;
-
-const comingSoonProducts = [
-  {
-    name: "TowPROOF",
-    color: "#FACC15",
-    glow: "rgba(250,204,21,0.18)",
-    border: "rgba(250,204,21,0.24)",
-    description:
-      "Designed for tow operators, hot shot services, impounds, transport records, and vehicle condition documentation.",
-    bullets: [
-      "Tow intake and hookup photos",
-      "Vehicle move and destination proof",
-      "Featuring ClaimPROOF reporting",
-    ],
-  },
-  {
-    name: "IncidentPROOF",
-    color: "#EF4444",
-    glow: "rgba(239,68,68,0.18)",
-    border: "rgba(239,68,68,0.24)",
-    description:
-      "Accident-scene documentation for driver information, photos, and incident reporting before the story changes.",
-    bullets: [
-      "Scene photos with time and location context",
-      "Driver, insurance, and witness information capture",
-      "Featuring ClaimPROOF reporting",
-    ],
-  },
-  {
-    name: "ShopPROOF",
-    color: "#3B82F6",
-    glow: "rgba(59,130,246,0.18)",
-    border: "rgba(59,130,246,0.24)",
-    description:
-      "Repair shop documentation for service intake, before-and-after photos, and customer vehicle accountability.",
-    bullets: [
-      "Service intake documentation",
-      "Before and after repair photos",
-      "Featuring ClaimPROOF reporting",
-    ],
   },
 ] as const;
 
@@ -183,10 +256,10 @@ export default function HomePage() {
   const { isMobile, isTablet } = useViewport();
 
   const containerPadding = isMobile
-    ? "14px 12px 28px"
+    ? "18px 12px 28px"
     : isTablet
-      ? "18px 16px 34px"
-      : "20px 18px 40px";
+      ? "20px 16px 34px"
+      : "24px 18px 40px";
 
   const heroPadding = isMobile
     ? "18px 14px 16px"
@@ -195,33 +268,256 @@ export default function HomePage() {
       : "28px 26px 24px";
 
   const heroGridColumns = isMobile || isTablet ? "1fr" : "1.08fr 0.92fr";
-  const heroHeadingSize = isMobile ? 34 : isTablet ? 46 : 60;
-  const heroTextSize = isMobile ? 16 : isTablet ? 17 : 19;
+  const heroHeadingSize = isMobile ? 34 : isTablet ? 46 : 58;
+  const heroTextSize = isMobile ? 15 : isTablet ? 17 : 18;
   const heroImageMinHeight = isMobile ? 220 : isTablet ? 300 : 420;
 
   const statsGridColumns = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
-  const problemGridColumns = isMobile
+  const problemGridColumns = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
+  const engineGridColumns = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
+  const availableGridColumns = isMobile
     ? "1fr"
     : isTablet
       ? "repeat(2, minmax(0, 1fr))"
       : "repeat(3, minmax(0, 1fr))";
-  const engineGridColumns = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
-  const liveGridColumns = isMobile
-    ? "1fr"
-    : isTablet
-      ? "repeat(2, minmax(0, 1fr))"
-      : "repeat(4, minmax(0, 1fr))";
   const comingSoonGridColumns = isMobile
     ? "1fr"
     : isTablet
       ? "repeat(2, minmax(0, 1fr))"
       : "repeat(3, minmax(0, 1fr))";
-  const finalGridColumns = isMobile || isTablet ? "1fr" : "1.06fr 0.94fr";
 
   const sectionTitleSize = isMobile ? 22 : 28;
   const productTitleSize = isMobile ? 26 : isTablet ? 30 : 34;
-  const comingSoonTitleSize = isMobile ? 24 : 30;
-  const finalTitleSize = isMobile ? 25 : isTablet ? 30 : 34;
+
+  const renderProductCard = (product: ProductCard) => {
+    const theme = productThemeMap[product.id];
+    if (!theme) return null;
+
+    const buttonLabel = product.disabled
+      ? `View ${product.name}`
+      : `Open ${product.name}`;
+
+    return (
+      <article
+        key={product.id}
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: 24,
+          border: `1px solid ${theme.border}`,
+          background: theme.heroGradient,
+          boxShadow: `0 18px 42px ${theme.surfaceGlow}`,
+          padding: 16,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: `
+              radial-gradient(circle at top left, ${theme.spotlight}, transparent 30%),
+              linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0))
+            `,
+            pointerEvents: "none",
+          }}
+        />
+
+        <div
+          style={{
+            position: "relative",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              marginBottom: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "7px 12px",
+                borderRadius: 999,
+                border: `1px solid ${theme.border}`,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
+                color: theme.primary,
+                fontWeight: 900,
+                fontSize: 12,
+                boxShadow: `0 8px 18px ${theme.surfaceGlow}`,
+              }}
+            >
+              {product.name}
+            </div>
+
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "7px 11px",
+                borderRadius: 999,
+                border: `1px solid ${theme.statusBorder}`,
+                background: theme.statusBg,
+                color: theme.statusText,
+                fontWeight: 900,
+                fontSize: 11,
+                letterSpacing: 0.7,
+                textTransform: "uppercase",
+                boxShadow: `0 8px 18px ${theme.surfaceGlow}`,
+              }}
+            >
+              {product.status}
+            </div>
+          </div>
+
+          <div
+            style={{
+              position: "relative",
+              height: isMobile ? 180 : isTablet ? 190 : 210,
+              borderRadius: 18,
+              overflow: "hidden",
+              border: `1px solid ${theme.border}`,
+              boxShadow:
+                "0 14px 30px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.05)",
+              background: "#0A1422",
+              marginBottom: 16,
+            }}
+          >
+            <Image
+              src={product.image}
+              alt={product.name}
+              fill
+              style={{ objectFit: "cover" }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: `
+                  linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.34)),
+                  radial-gradient(circle at top left, ${theme.spotlight}, transparent 32%)
+                `,
+              }}
+            />
+          </div>
+
+          <h3
+            style={{
+              fontSize: productTitleSize,
+              lineHeight: 0.98,
+              letterSpacing: -1,
+              marginTop: 0,
+              marginBottom: 10,
+            }}
+          >
+            {product.name}
+          </h3>
+
+          <p
+            style={{
+              color: "#D4DDEA",
+              lineHeight: 1.52,
+              fontSize: isMobile ? 14 : 15,
+              marginTop: 0,
+              marginBottom: 14,
+              minHeight: isMobile ? "auto" : 76,
+            }}
+          >
+            {product.description}
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              marginBottom: 16,
+            }}
+          >
+            {product.bullets.map((item) => (
+              <div
+                key={item}
+                style={{
+                  position: "relative",
+                  overflow: "hidden",
+                  borderRadius: 12,
+                  border: `1px solid ${theme.border}`,
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
+                  padding: "11px 12px 11px 16px",
+                  color: "#EEF3F9",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  boxShadow:
+                    "0 8px 20px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)",
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 4,
+                    background: theme.primary,
+                    boxShadow: `0 0 14px ${theme.heroGlow}`,
+                  }}
+                />
+                {item}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: "auto" }}>
+            {product.disabled ? (
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "12px 18px",
+                  borderRadius: 14,
+                  border: `1px solid ${theme.border}`,
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
+                  color: "#9FB0C6",
+                  fontWeight: 900,
+                  fontSize: 14,
+                  opacity: 0.7,
+                  cursor: "not-allowed",
+                }}
+              >
+                {buttonLabel}
+              </div>
+            ) : (
+              <Link
+                href={product.href ?? "#"}
+                style={{
+                  display: "inline-block",
+                  textDecoration: "none",
+                  padding: "12px 18px",
+                  borderRadius: 14,
+                  background: theme.button,
+                  color: theme.buttonText,
+                  fontWeight: 900,
+                  fontSize: 14,
+                  boxShadow: `0 14px 28px ${theme.heroGlow}`,
+                  transition: "all 0.2s ease",
+                }}
+              >
+                {buttonLabel}
+              </Link>
+            )}
+          </div>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <main
@@ -230,8 +526,8 @@ export default function HomePage() {
         color: "white",
         background: `
           radial-gradient(circle at 0% 0%, rgba(24,211,164,0.12), transparent 24%),
-          radial-gradient(circle at 100% 0%, rgba(255,138,31,0.12), transparent 24%),
-          radial-gradient(circle at 80% 100%, rgba(125,123,255,0.12), transparent 30%),
+          radial-gradient(circle at 100% 0%, rgba(125,123,255,0.10), transparent 22%),
+          radial-gradient(circle at 80% 100%, rgba(255,138,31,0.10), transparent 30%),
           linear-gradient(180deg, #07111D 0%, #081423 46%, #09182A 100%)
         `,
       }}
@@ -243,85 +539,6 @@ export default function HomePage() {
           padding: containerPadding,
         }}
       >
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 14,
-            flexWrap: "wrap",
-            marginBottom: 18,
-          }}
-        >
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "8px 14px 8px 10px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
-              boxShadow:
-                "0 10px 24px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.08)",
-              fontWeight: 900,
-              letterSpacing: 0.3,
-              fontSize: 14,
-            }}
-          >
-            <div
-              style={{
-                position: "relative",
-                width: 24,
-                height: 24,
-                borderRadius: 999,
-                overflow: "hidden",
-                boxShadow: "0 0 16px rgba(24,211,164,0.22)",
-                flexShrink: 0,
-              }}
-            >
-              <Image
-                src="/images/proof-platform.png"
-                alt="PROOF Platform"
-                fill
-                style={{ objectFit: "cover" }}
-              />
-            </div>
-            PROOF Platform
-          </div>
-
-          <nav
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
-            {liveProducts.map((product) => (
-              <Link
-                key={product.id}
-                href={`/${product.id}`}
-                style={{
-                  textDecoration: "none",
-                  color: "#E7EDF6",
-                  padding: "9px 13px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-                  fontWeight: 800,
-                  fontSize: 13,
-                  boxShadow:
-                    "0 8px 18px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.06)",
-                }}
-              >
-                {product.name}
-              </Link>
-            ))}
-          </nav>
-        </header>
-
         <section
           style={{
             position: "relative",
@@ -341,8 +558,8 @@ export default function HomePage() {
               inset: 0,
               background: `
                 radial-gradient(circle at 10% 14%, rgba(24,211,164,0.20), transparent 26%),
-                radial-gradient(circle at 76% 12%, rgba(255,138,31,0.18), transparent 24%),
-                radial-gradient(circle at 72% 84%, rgba(125,123,255,0.18), transparent 30%),
+                radial-gradient(circle at 76% 12%, rgba(125,123,255,0.16), transparent 24%),
+                radial-gradient(circle at 72% 84%, rgba(255,138,31,0.14), transparent 30%),
                 linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0))
               `,
               pointerEvents: "none",
@@ -417,7 +634,7 @@ export default function HomePage() {
                 }}
               >
                 <Link
-                  href="/servproof"
+                  href="/towproof"
                   style={{
                     textDecoration: "none",
                     padding: "12px 18px",
@@ -433,22 +650,24 @@ export default function HomePage() {
                   Explore the product family
                 </Link>
 
-                <div
+                <Link
+                  href="/towproof"
                   style={{
-                    padding: "12px 16px",
+                    textDecoration: "none",
+                    padding: "12px 18px",
                     borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    border: "1px solid rgba(250,204,21,0.22)",
                     background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))",
-                    color: "#EFF4FA",
-                    fontWeight: 800,
+                      "linear-gradient(180deg, rgba(250,204,21,0.16), rgba(250,204,21,0.08))",
+                    color: "#FDE68A",
+                    fontWeight: 900,
                     fontSize: 14,
                     boxShadow:
-                      "0 10px 22px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+                      "0 10px 22px rgba(250,204,21,0.10), inset 0 1px 0 rgba(255,255,255,0.06)",
                   }}
                 >
-                  Subscription-ready platform
-                </div>
+                  Open TowPROOF Preview
+                </Link>
               </div>
 
               <div
@@ -465,12 +684,12 @@ export default function HomePage() {
                     value: "Asset → Inspection → Record",
                   },
                   {
-                    label: "Commercial use",
-                    value: "Trials, subscriptions, onboarding",
+                    label: "Current focus",
+                    value: "Shop + Tow + Serv",
                   },
                   {
                     label: "Platform direction",
-                    value: "Live + coming soon product family",
+                    value: "Live systems + preview builds",
                   },
                 ].map((item) => (
                   <div
@@ -679,9 +898,8 @@ export default function HomePage() {
 
                 <h3
                   style={{
-                    fontSize: isMobile ? 20 : 22,
-                    lineHeight: 1.06,
-                    letterSpacing: -0.6,
+                    fontSize: isMobile ? 19 : 21,
+                    letterSpacing: -0.5,
                     marginTop: 0,
                     marginBottom: 8,
                   }}
@@ -691,10 +909,10 @@ export default function HomePage() {
 
                 <p
                   style={{
-                    color: "#C5CFDB",
-                    fontSize: isMobile ? 14 : 15,
-                    lineHeight: 1.55,
                     margin: 0,
+                    fontSize: 15,
+                    lineHeight: 1.55,
+                    color: "#C5CFDB",
                   }}
                 >
                   {item.text}
@@ -736,80 +954,73 @@ export default function HomePage() {
                 fontSize: 13,
               }}
             >
-              One system powering every product
+              Shared structure behind current and future tools
             </div>
           </div>
 
           <div
             style={{
-              borderRadius: 24,
-              border: "1px solid rgba(255,255,255,0.10)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-              boxShadow: "0 18px 46px rgba(0,0,0,0.18)",
-              padding: isMobile ? 14 : 20,
+              display: "grid",
+              gridTemplateColumns: engineGridColumns,
+              gap: 12,
             }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: engineGridColumns,
-                gap: 12,
-              }}
-            >
-              {engineCards.map((item) => (
+            {engineCards.map((item) => (
+              <article
+                key={item.title}
+                style={{
+                  position: "relative",
+                  overflow: "hidden",
+                  borderRadius: 20,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
+                  boxShadow: "0 16px 38px rgba(0,0,0,0.16)",
+                  padding: 18,
+                }}
+              >
                 <div
-                  key={item.title}
                   style={{
-                    position: "relative",
-                    overflow: "hidden",
-                    borderRadius: 18,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
-                    padding: 17,
-                    boxShadow:
-                      "0 12px 30px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+                    width: 56,
+                    height: 4,
+                    borderRadius: 999,
+                    background: item.accent,
+                    marginBottom: 12,
+                    boxShadow: `0 0 14px ${item.accent}55`,
+                  }}
+                />
+
+                <h3
+                  style={{
+                    fontSize: isMobile ? 19 : 21,
+                    letterSpacing: -0.5,
+                    marginTop: 0,
+                    marginBottom: 8,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 52,
-                      height: 4,
-                      borderRadius: 999,
-                      background: item.accent,
-                      marginBottom: 10,
-                    }}
-                  />
+                  {item.title}
+                </h3>
 
-                  <h3
-                    style={{
-                      fontSize: isMobile ? 18 : 19,
-                      marginTop: 0,
-                      marginBottom: 8,
-                      letterSpacing: -0.4,
-                    }}
-                  >
-                    {item.title}
-                  </h3>
-
-                  <p
-                    style={{
-                      fontSize: 14,
-                      color: "#C5CFDB",
-                      lineHeight: 1.5,
-                      margin: 0,
-                    }}
-                  >
-                    {item.text}
-                  </p>
-                </div>
-              ))}
-            </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 15,
+                    lineHeight: 1.55,
+                    color: "#C5CFDB",
+                  }}
+                >
+                  {item.text}
+                </p>
+              </article>
+            ))}
           </div>
         </section>
 
-        <section style={{ marginBottom: 14 }}>
+        <section
+          style={{
+            marginBottom: 14,
+          }}
+        >
           <div
             style={{
               display: "flex",
@@ -837,213 +1048,37 @@ export default function HomePage() {
                 fontSize: 13,
               }}
             >
-              Live product family
+              Current focus products
             </div>
           </div>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: liveGridColumns,
+              gridTemplateColumns: availableGridColumns,
               gap: 12,
               alignItems: "stretch",
-              marginBottom: 14,
             }}
           >
-            {liveProducts.map((product) => {
-              const theme = productThemeMap[product.id] ?? {
-                primary: "#18D3A4",
-                border: "rgba(24,211,164,0.26)",
-                heroGradient:
-                  "linear-gradient(180deg, rgba(24,211,164,0.14), rgba(255,255,255,0.04))",
-                surfaceGlow: "rgba(24,211,164,0.16)",
-                spotlight: "rgba(24,211,164,0.18)",
-                heroGlow: "rgba(24,211,164,0.24)",
-              };
-
-              return (
-                <article
-                  key={product.id}
-                  style={{
-                    position: "relative",
-                    overflow: "hidden",
-                    borderRadius: 20,
-                    border: `1px solid ${theme.border}`,
-                    background: theme.heroGradient,
-                    boxShadow: `0 16px 42px ${theme.surfaceGlow}`,
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background: `
-                        radial-gradient(circle at top left, ${theme.spotlight}, transparent 28%),
-                        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0))
-                      `,
-                      pointerEvents: "none",
-                    }}
-                  />
-
-                  <div
-                    style={{
-                      position: "relative",
-                      padding: 16,
-                      display: "flex",
-                      flexDirection: "column",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        marginBottom: 12,
-                        border: `1px solid ${theme.border}`,
-                        background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
-                        color: theme.primary,
-                        fontWeight: 900,
-                        fontSize: 12,
-                        boxShadow: `0 8px 18px ${theme.surfaceGlow}`,
-                        alignSelf: "flex-start",
-                      }}
-                    >
-                      {product.name}
-                    </div>
-
-                    <div
-                      style={{
-                        position: "relative",
-                        height: isMobile ? 150 : isTablet ? 165 : 170,
-                        borderRadius: 14,
-                        overflow: "hidden",
-                        border: `1px solid ${theme.border}`,
-                        marginBottom: 12,
-                        boxShadow:
-                          "0 12px 28px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.05)",
-                        background: "#0A1422",
-                      }}
-                    >
-                      <Image
-                        src={liveProductImageMap[product.id]}
-                        alt={product.name}
-                        fill
-                        style={{ objectFit: "cover" }}
-                      />
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background: `
-                            linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.42)),
-                            radial-gradient(circle at top left, ${theme.spotlight}, transparent 30%)
-                          `,
-                        }}
-                      />
-                    </div>
-
-                    <h3
-                      style={{
-                        fontSize: productTitleSize,
-                        lineHeight: 1,
-                        marginTop: 0,
-                        marginBottom: 9,
-                        letterSpacing: -1,
-                      }}
-                    >
-                      {product.name}
-                    </h3>
-
-                    <p
-                      style={{
-                        color: "#D4DDEA",
-                        lineHeight: 1.55,
-                        fontSize: isMobile ? 14 : 15,
-                        marginTop: 0,
-                        marginBottom: 12,
-                        minHeight: isMobile ? "auto" : 64,
-                      }}
-                    >
-                      {liveProductDescriptions[product.id] ?? product.description}
-                    </p>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gap: 8,
-                        marginBottom: 12,
-                      }}
-                    >
-                      {(liveProductBullets[product.id] ?? []).map((item) => (
-                        <div
-                          key={item}
-                          style={{
-                            position: "relative",
-                            overflow: "hidden",
-                            borderRadius: 12,
-                            border: `1px solid ${theme.border}`,
-                            background:
-                              "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
-                            padding: "11px 12px 11px 16px",
-                            color: "#F2F6FB",
-                            fontWeight: 800,
-                            fontSize: 13,
-                            boxShadow:
-                              "0 8px 20px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
-                          }}
-                        >
-                          <span
-                            style={{
-                              position: "absolute",
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              width: 4,
-                              background: theme.primary,
-                              boxShadow: `0 0 14px ${theme.heroGlow}`,
-                            }}
-                          />
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-
-                    <Link
-                      href={`/${product.id}`}
-                      style={{
-                        display: "inline-block",
-                        textDecoration: "none",
-                        padding: "11px 14px",
-                        borderRadius: 12,
-                        background: theme.primary,
-                        color: "#081018",
-                        fontWeight: 900,
-                        fontSize: 14,
-                        boxShadow: `0 12px 24px ${theme.heroGlow}`,
-                        alignSelf: "flex-start",
-                      }}
-                    >
-                      View {product.name}
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
+            {availableProducts.map(renderProductCard)}
           </div>
+        </section>
 
+        <section
+          style={{
+            marginBottom: 20,
+          }}
+        >
           <p
             style={{
-              color: "#C2CCD8",
+              marginTop: 0,
+              marginBottom: 14,
+              color: "#B9C4D3",
               fontSize: isMobile ? 14 : 15,
               lineHeight: 1.55,
-              marginTop: 0,
-              marginBottom: 12,
             }}
           >
-            Next divisions planned for the PROOF ecosystem — featuring
-            ClaimPROOF reporting.
+            Next divisions planned for the PROOF ecosystem.
           </p>
 
           <div
@@ -1051,250 +1086,10 @@ export default function HomePage() {
               display: "grid",
               gridTemplateColumns: comingSoonGridColumns,
               gap: 12,
+              alignItems: "stretch",
             }}
           >
-            {comingSoonProducts.map((product) => (
-              <article
-                key={product.name}
-                style={{
-                  position: "relative",
-                  overflow: "hidden",
-                  borderRadius: 20,
-                  border: `1px solid ${product.border}`,
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-                  boxShadow: `0 16px 40px ${product.glow}`,
-                  padding: 18,
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: `radial-gradient(circle at top left, ${product.glow}, transparent 32%)`,
-                    pointerEvents: "none",
-                  }}
-                />
-
-                <div style={{ position: "relative" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      marginBottom: 12,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        border: `1px solid ${product.border}`,
-                        background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))",
-                        color: product.color,
-                        fontWeight: 900,
-                        fontSize: 12,
-                        boxShadow: `0 8px 18px ${product.glow}`,
-                      }}
-                    >
-                      {product.name}
-                    </div>
-
-                    <div
-                      style={{
-                        padding: "6px 9px",
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        background: "rgba(255,255,255,0.05)",
-                        color: "#F8FAFC",
-                        fontSize: 10,
-                        fontWeight: 900,
-                        letterSpacing: 0.7,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      Coming Soon
-                    </div>
-                  </div>
-
-                  <h3
-                    style={{
-                      fontSize: comingSoonTitleSize,
-                      lineHeight: 1,
-                      letterSpacing: -1,
-                      marginTop: 0,
-                      marginBottom: 10,
-                    }}
-                  >
-                    {product.name}
-                  </h3>
-
-                  <p
-                    style={{
-                      color: "#D4DDEA",
-                      lineHeight: 1.55,
-                      fontSize: isMobile ? 14 : 15,
-                      minHeight: isMobile ? "auto" : 78,
-                      marginBottom: 12,
-                    }}
-                  >
-                    {product.description}
-                  </p>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 8,
-                    }}
-                  >
-                    {product.bullets.map((item) => (
-                      <div
-                        key={item}
-                        style={{
-                          position: "relative",
-                          overflow: "hidden",
-                          borderRadius: 12,
-                          border: `1px solid ${product.border}`,
-                          background:
-                            "linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.04))",
-                          padding: "11px 12px 11px 16px",
-                          color: "#F2F6FB",
-                          fontWeight: 800,
-                          fontSize: 13,
-                          boxShadow:
-                            "0 8px 20px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.08)",
-                        }}
-                      >
-                        <span
-                          style={{
-                            position: "absolute",
-                            left: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: 4,
-                            background: product.color,
-                            boxShadow: `0 0 14px ${product.glow}`,
-                          }}
-                        />
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section
-          style={{
-            borderRadius: 24,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
-            boxShadow: "0 18px 46px rgba(0,0,0,0.18)",
-            padding: isMobile ? 16 : 20,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: finalGridColumns,
-              gap: 16,
-              alignItems: "start",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  color: "#9CA3AF",
-                  fontSize: 10,
-                  fontWeight: 900,
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  marginBottom: 8,
-                }}
-              >
-                Final direction
-              </div>
-
-              <h2
-                style={{
-                  fontSize: finalTitleSize,
-                  letterSpacing: -1,
-                  marginTop: 0,
-                  marginBottom: 10,
-                }}
-              >
-                Built as a product ecosystem, not a single feature app.
-              </h2>
-
-              <p
-                style={{
-                  color: "#C2CCD8",
-                  fontSize: isMobile ? 14 : 15,
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                The platform now presents a credible live product family and a
-                clear next-wave roadmap including TowPROOF, IncidentPROOF, and
-                ShopPROOF.
-              </p>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 8,
-              }}
-            >
-              {[
-                "Live products supported by one shared PROOF engine",
-                "ClaimPROOF now positioned as a reporting layer across the ecosystem",
-                "Ready to continue into trials, pricing, billing, and auth",
-              ].map((item, index) => (
-                <div
-                  key={item}
-                  style={{
-                    position: "relative",
-                    overflow: "hidden",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))",
-                    padding: "12px 12px 12px 16px",
-                    fontWeight: 800,
-                    fontSize: 13,
-                    color: "#EEF2F7",
-                    boxShadow:
-                      "0 8px 18px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.07)",
-                  }}
-                >
-                  <span
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 4,
-                      background:
-                        index === 0
-                          ? "linear-gradient(180deg, #18D3A4, #24E1B4)"
-                          : index === 1
-                            ? "linear-gradient(180deg, #FACC15, #FDE047)"
-                            : "linear-gradient(180deg, #7D7BFF, #A5A4FF)",
-                    }}
-                  />
-                  {item}
-                </div>
-              ))}
-            </div>
+            {comingSoonProducts.map(renderProductCard)}
           </div>
         </section>
       </div>
