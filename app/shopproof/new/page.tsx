@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/client";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AlertCircle,
   ArrowLeft,
@@ -18,7 +18,6 @@ import {
   ScanLine,
   Shield,
   UserCircle2,
-  UserRound,
   Wrench,
 } from "lucide-react";
 
@@ -142,6 +141,17 @@ const INITIAL_FORM: FormState = {
   advisor: "Thomas",
   technician: "Unassigned",
 };
+
+function getBrowserSupabaseClient(): SupabaseClient | null {
+  if (typeof window === "undefined") return null;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) return null;
+
+  return createClient(url, key);
+}
 
 export default function ShopProofNewPage() {
   const router = useRouter();
@@ -424,6 +434,12 @@ export default function ShopProofNewPage() {
     setSubmitError(null);
 
     try {
+      const supabase = getBrowserSupabaseClient();
+
+      if (!supabase) {
+        throw new Error("Supabase not available.");
+      }
+
       const { data: shops, error: shopError } = await supabase
         .from("shops")
         .select("id")
@@ -720,7 +736,7 @@ export default function ShopProofNewPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(3, 1fr)",
+              gridTemplateColumns: "repeat(3, 1fr)",
               gap: 10,
               minWidth: 0,
               position: "relative",
