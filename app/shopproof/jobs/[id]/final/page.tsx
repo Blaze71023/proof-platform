@@ -4,7 +4,10 @@ import { useParams } from "next/navigation";
 
 export default function ShopProofFinalPage() {
   const params = useParams();
-  const jobId = params?.id as string;
+
+  const jobId = Array.isArray(params?.id)
+    ? params.id[0]
+    : params?.id || "";
 
   return (
     <main
