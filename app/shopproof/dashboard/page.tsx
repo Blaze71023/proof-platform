@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/client";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AlertTriangle,
   Bell,
@@ -166,6 +166,17 @@ const THEME = {
     "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
 };
 
+function getBrowserSupabaseClient(): SupabaseClient | null {
+  if (typeof window === "undefined") return null;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) return null;
+
+  return createClient(url, anonKey);
+}
+
 export default function ShopProofDashboardPage() {
   const router = useRouter();
   const [width, setWidth] = useState(1440);
@@ -180,9 +191,12 @@ export default function ShopProofDashboardPage() {
   const [alerts] = useState<AlertItem[]>([]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const onResize = () => setWidth(window.innerWidth);
     onResize();
     window.addEventListener("resize", onResize);
+
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
@@ -193,7 +207,17 @@ export default function ShopProofDashboardPage() {
       setLoadingJobs(true);
       setJobsError(null);
 
-      const { data, error } = await supabase
+      const client = getBrowserSupabaseClient();
+
+      if (!client) {
+        if (!isMounted) return;
+        setJobs([]);
+        setJobsError("Supabase environment variables are missing.");
+        setLoadingJobs(false);
+        return;
+      }
+
+      const { data, error } = await client
         .from("jobs")
         .select(`
           id,
@@ -303,7 +327,11 @@ export default function ShopProofDashboardPage() {
     return normalizedJobs
       .filter((job) => {
         const status = normalizeVehicleStatus(job.status);
-        return status === "In Progress" || status === "Waiting on Parts" || status === "Diagnostics";
+        return (
+          status === "In Progress" ||
+          status === "Waiting on Parts" ||
+          status === "Diagnostics"
+        );
       })
       .map((job) => {
         const vehicle = job.vehicle as VehicleRow | null;
@@ -497,9 +525,7 @@ export default function ShopProofDashboardPage() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: isMobile
-                        ? "1fr"
-                        : "repeat(2, minmax(0, 1fr))",
+                      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
                       gap: 10,
                     }}
                   >
@@ -666,9 +692,7 @@ export default function ShopProofDashboardPage() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: isMobile
-                        ? "1fr"
-                        : "repeat(3, minmax(0, 1fr))",
+                      gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
                       gap: 10,
                     }}
                   >
@@ -2201,7 +2225,10 @@ function normalizeApprovalStatus(status: string | null): ApprovalStatus | null {
 }
 
 function formatVehicleLabel(vehicle: VehicleRow) {
-  return [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() || "Unknown Vehicle";
+  return (
+    [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() ||
+    "Unknown Vehicle"
+  );
 }
 
 function formatDueText(createdAt: string | null) {
