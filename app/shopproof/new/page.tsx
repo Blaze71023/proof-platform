@@ -164,7 +164,6 @@ const INITIAL_FORM: FormState = {
 };
 
 const VIN_ALLOWED_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
-const VIN_LIKE_CHAR_REGEX = /[A-Z0-9]/;
 const VIN_LINE_CLEAN_REGEX = /[^A-Z0-9]/g;
 const VIN_SUBSTITUTION_MAP: Record<string, string> = {
   O: "0",
@@ -284,7 +283,7 @@ export default function ShopProofNewPage() {
       },
       {
         key: "phone",
-        label: phoneState.tone === "green" ? "Phone number" : "Phone number",
+        label: "Phone number",
         tone: phoneState.tone,
         status: phoneState.status,
       },
@@ -409,7 +408,7 @@ export default function ShopProofNewPage() {
       setPendingVinInput(detected.vin);
 
       setScanMessage(
-        `VIN candidate detected. Review and confirm before it is accepted.`,
+        "VIN candidate detected. Review and confirm before it is accepted.",
       );
     } catch (error) {
       console.error("VIN scan failed:", error);
@@ -446,7 +445,7 @@ export default function ShopProofNewPage() {
     setScanMessage(`VIN confirmed: ${confirmedVin}. Decoding vehicle details...`);
 
     try {
-      const decoded = await decodeVinWithNhtsa(
+      const decoded = await decodeVinViaAppRoute(
         confirmedVin,
         form.year.trim() || undefined,
       );
@@ -466,7 +465,7 @@ export default function ShopProofNewPage() {
       setScanMessage(
         identity
           ? `VIN confirmed and decoded. ${confirmedVin} → ${identity}`
-          : `VIN confirmed: ${confirmedVin}. Fill any missing vehicle details if needed.`,
+          : `VIN confirmed: ${confirmedVin}. Decode unavailable right now. Fill any missing vehicle details if needed.`,
       );
 
       clearPendingVinState();
@@ -479,9 +478,7 @@ export default function ShopProofNewPage() {
       }));
 
       setScanMessage(
-        error instanceof Error
-          ? `VIN confirmed. ${error.message}`
-          : "VIN confirmed. Decode service was unavailable, so complete vehicle details manually if needed.",
+        "VIN confirmed. Decode unavailable right now. Enter year/make/model manually if needed.",
       );
 
       clearPendingVinState();
@@ -524,7 +521,7 @@ export default function ShopProofNewPage() {
     }));
 
     try {
-      const decoded = await decodeVinWithNhtsa(demoVin);
+      const decoded = await decodeVinViaAppRoute(demoVin);
       setForm((prev) => ({
         ...prev,
         year: decoded.year || prev.year,
@@ -532,7 +529,7 @@ export default function ShopProofNewPage() {
         model: decoded.model || prev.model,
       }));
       setScanMessage(
-        `Demo VIN decoded through NHTSA: ${[
+        `Demo VIN decoded through app route: ${[
           decoded.year,
           decoded.make,
           decoded.model,
@@ -548,7 +545,7 @@ export default function ShopProofNewPage() {
         model: prev.model || "F-150",
       }));
       setScanMessage(
-        "Demo vehicle filled. VIN decode was unavailable, so fallback values were used.",
+        "Demo vehicle filled. Decode was unavailable, so fallback values were used.",
       );
     } finally {
       setIsDecodingVin(false);
@@ -1648,7 +1645,7 @@ export default function ShopProofNewPage() {
                         marginTop: "3px",
                       }}
                     >
-                      Strict VIN extraction and confirmation flow are now built into intake.
+                      Strict VIN extraction and server-side decode are now built into intake.
                     </div>
                   </div>
 
@@ -2257,7 +2254,7 @@ function isValidVin(value: string) {
   return VIN_ALLOWED_REGEX.test(value);
 }
 
-async function decodeVinWithNhtsa(
+async function decodeVinViaAppRoute(
   vin: string,
   modelYear?: string,
 ): Promise<VehicleDecode> {
@@ -2267,30 +2264,27 @@ async function decodeVinWithNhtsa(
     throw new Error("VIN decode could not run because the VIN is invalid.");
   }
 
-  const yearSegment = modelYear?.trim()
-    ? `/${encodeURIComponent(modelYear.trim())}`
-    : "";
-  const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(
-    cleanVin,
-  )}${yearSegment}?format=json`;
+  const response = await fetch("/api/vin-decode", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      vin: cleanVin,
+      modelYear: modelYear?.trim() || "",
+    }),
+  });
 
-  const response = await fetch(url);
+  const payload = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    throw new Error("VIN decode service is unavailable right now.");
+  if (!response.ok || !payload?.success) {
+    throw new Error(payload?.message || "VIN decode failed.");
   }
 
-  const payload = await response.json();
-  const row = Array.isArray(payload?.Results) ? payload.Results[0] : null;
-
-  const year = String(row?.ModelYear ?? "").trim();
-  const make = String(row?.Make ?? "").trim();
-  const model = String(row?.Model ?? "").trim();
-
   return {
-    year: year && year !== "0" ? year : "",
-    make: make && make.toLowerCase() !== "not applicable" ? toTitleCase(make) : "",
-    model: model && model.toLowerCase() !== "not applicable" ? model : "",
+    year: String(payload?.year ?? "").trim(),
+    make: String(payload?.make ?? "").trim(),
+    model: String(payload?.model ?? "").trim(),
   };
 }
 
@@ -2403,7 +2397,10 @@ function extractBestVinFromOcrPasses(passes: OcrPassResult[]): VinCandidate | nu
       const rawLine = line.trim().toUpperCase();
       if (!rawLine) return;
 
-      const lineCandidates = extractCandidatesFromLine(rawLine, lineIndex + passIndex * 1000);
+      const lineCandidates = extractCandidatesFromLine(
+        rawLine,
+        lineIndex + passIndex * 1000,
+      );
 
       for (const candidate of lineCandidates) {
         const existing = candidates.get(candidate.vin);
@@ -2525,8 +2522,6 @@ function buildCandidateWindowsFromLine(rawLine: string) {
 }
 
 function looksLikeRealVin(vin: string) {
-  if (!VIN_LIKE_CHAR_REGEX.test(vin)) return false;
-
   const digitCount = (vin.match(/\d/g) || []).length;
   const alphaCount = (vin.match(/[A-HJ-NPR-Z]/g) || []).length;
 
@@ -2647,15 +2642,6 @@ function isVinChecksumValid(vin: string) {
   const expectedCheck = remainder === 10 ? "X" : String(remainder);
 
   return vin[8] === expectedCheck;
-}
-
-function toTitleCase(value: string) {
-  return value
-    .toLowerCase()
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 const fieldLabel: CSSProperties = {
