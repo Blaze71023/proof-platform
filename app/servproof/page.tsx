@@ -265,35 +265,41 @@ export default function ServProofOverviewPage() {
     [assets]
   );
 
-  const normalizedRecords = useMemo(
-  (): RecordEntry[] =>
-    records.map((record) => ({
-      ...record,
-      location: record.location || "",
-      photos: Array.isArray(record.photos) ? record.photos : [],
-      status:
-        record.status === "issue" || record.status === "working"
-          ? record.status
-          : "working",
-      priority:
+  const normalizedRecords = useMemo<RecordEntry[]>(
+  () =>
+    records.map((record) => {
+      const normalizedPriority: "low" | "medium" | "high" =
         record.priority === "high"
           ? "high"
           : record.priority === "medium"
             ? "medium"
-            : "low",
-      reportedBy:
-        typeof record.reportedBy === "string" ? record.reportedBy : "",
-      assignedTech:
-        typeof record.assignedTech === "string" ? record.assignedTech : "",
-      scheduledFor:
-        typeof record.scheduledFor === "string" ? record.scheduledFor : "",
-      repairStatus:
+            : "low";
+
+      const normalizedRepairStatus: "scheduled" | "in-progress" | "completed" =
         record.repairStatus === "in-progress"
           ? "in-progress"
           : record.repairStatus === "completed"
             ? "completed"
-            : "scheduled",
-    })),
+            : "scheduled";
+
+      return {
+        ...record,
+        location: record.location || "",
+        photos: Array.isArray(record.photos) ? record.photos : [],
+        status:
+          record.status === "issue" || record.status === "working"
+            ? record.status
+            : "working",
+        priority: normalizedPriority,
+        reportedBy:
+          typeof record.reportedBy === "string" ? record.reportedBy : "",
+        assignedTech:
+          typeof record.assignedTech === "string" ? record.assignedTech : "",
+        scheduledFor:
+          typeof record.scheduledFor === "string" ? record.scheduledFor : "",
+        repairStatus: normalizedRepairStatus,
+      };
+    }),
   [records]
 );
 

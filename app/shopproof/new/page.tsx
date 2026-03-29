@@ -1,117 +1,106 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import {
-  AlertTriangle,
-  Bell,
+  AlertCircle,
+  ArrowLeft,
+  Camera,
   CarFront,
+  CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Package2,
+  FileText,
+  LoaderCircle,
   Plus,
+  Save,
+  ScanLine,
   Shield,
   UserCircle2,
+  UserRound,
   Wrench,
 } from "lucide-react";
 
-type VehicleStatus =
+type JobStatus =
+  | "New Intake"
+  | "Waiting on Approval"
+  | "Approved"
   | "In Progress"
   | "Waiting on Parts"
-  | "Ready for Pickup"
-  | "Diagnostics";
+  | "Ready for Pickup";
 
-type ApprovalStatus =
-  | "Pending Approval"
-  | "Approved"
-  | "Repairing";
-
+type ApprovalStatus = "Not Sent" | "Pending" | "Approved";
 type Accent = "blue" | "orange" | "emerald";
+type StatusTone = "red" | "yellow" | "green";
 
-interface VehicleCardData {
-  id: string;
-  year: string;
-  make: string;
-  model: string;
-  vin: string;
-  status: VehicleStatus;
-  accent: Accent;
-  img: string;
-}
-
-interface ApprovalCardData {
-  id: string;
-  vehicle: string;
-  concern: string;
-  estimate: string;
-  status: ApprovalStatus;
-  accent: Accent;
-  img: string;
-}
-
-interface RepairCardData {
-  id: string;
-  title: string;
-  vehicle: string;
-  due: string;
-  accent: "blue" | "orange";
-  img: string;
-}
-
-interface PartCardData {
-  id: string;
-  name: string;
-  vehicle: string;
-  due: string;
-  img: string;
-}
-
-interface TechCardData {
+type TeamMember = {
   id: string;
   name: string;
   role: string;
-  vehicle: string;
-  avatar: string;
-}
+};
 
-interface AlertItem {
-  id: string;
-  text: string;
-  tone: "warning" | "danger";
-}
+type FormState = {
+  customerName: string;
+  customerAddress: string;
+  phone: string;
+  email: string;
+  vin: string;
+  year: string;
+  make: string;
+  model: string;
+  plate: string;
+  mileageIn: string;
+  concern: string;
+  requestedWork: string;
+  notes: string;
+  status: JobStatus;
+  approvalStatus: ApprovalStatus;
+  advisor: string;
+  technician: string;
+};
+
+type FieldState = {
+  tone: StatusTone;
+  status: string;
+  hint?: string;
+};
+
+type ReadinessItem = {
+  key: string;
+  label: string;
+  tone: StatusTone;
+  status: string;
+};
+
+type ShopRow = { id: string };
+type CustomerRow = { id: string };
+type TeamMemberRow = { id: string | null };
+type VehicleDecode = { year: string; make: string; model: string };
+
+const TEAM_MEMBERS: TeamMember[] = [
+  { id: "1", name: "Thomas", role: "Service Advisor" },
+  { id: "2", name: "Mike", role: "Lead Technician" },
+  { id: "3", name: "Chris", role: "Technician" },
+  { id: "4", name: "Front Desk", role: "Advisor" },
+];
 
 const THEME = {
   pageBase:
-    "linear-gradient(180deg, #02060B 0%, #030912 16%, #03101B 42%, #020912 72%, #02060B 100%)",
+    "linear-gradient(180deg, #02060B 0%, #030912 18%, #03101B 46%, #020912 76%, #02060B 100%)",
   shell:
     "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(5,12,20,0.995) 42%, rgba(3,9,15,1) 100%)",
-  shellInner:
-    "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 16%, rgba(255,255,255,0) 36%)",
   panel:
     "linear-gradient(180deg, rgba(13,24,37,0.98) 0%, rgba(8,16,27,0.99) 48%, rgba(7,13,22,1) 100%)",
-  panelTop:
-    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.012) 24%, rgba(255,255,255,0) 56%)",
-  panelEdgeGlow:
-    "radial-gradient(circle at 50% 0%, rgba(70,130,255,0.08) 0%, rgba(70,130,255,0.03) 28%, rgba(70,130,255,0) 58%)",
   card:
     "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(14,27,42,0.98) 44%, rgba(10,20,33,1) 100%)",
-  cardTop:
-    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.014) 26%, rgba(255,255,255,0) 58%)",
-  thumb:
-    "linear-gradient(180deg, rgba(34,44,56,0.46) 0%, rgba(15,21,29,0.8) 100%)",
   text: "#F5FAFF",
   textSoft: "#D7E5F0",
   textMuted: "#9CB1C1",
-  textDim: "#73889A",
-  line: "rgba(255,255,255,0.09)",
   lineSoft: "rgba(255,255,255,0.055)",
   lineFaint: "rgba(255,255,255,0.032)",
   border: "1px solid rgba(109, 142, 176, 0.24)",
   borderSoft: "1px solid rgba(255,255,255,0.085)",
-  borderFaint: "1px solid rgba(255,255,255,0.05)",
   shellShadow: "0 34px 90px rgba(0,0,0,0.5)",
   panelShadow: "0 18px 42px rgba(0,0,0,0.24)",
   cardShadow: "0 10px 22px rgba(0,0,0,0.16)",
@@ -124,22 +113,50 @@ const THEME = {
   emerald: "#27D9BF",
   emeraldSoft: "rgba(39,217,191,0.18)",
   emeraldLine: "rgba(39,217,191,0.84)",
-  red: "#FF6D7C",
-  redSoft: "rgba(255,109,124,0.18)",
+  red: "#FF6B7A",
+  redSoft: "rgba(255,107,122,0.18)",
+  redLine: "rgba(255,107,122,0.84)",
+  yellow: "#F5C451",
+  yellowSoft: "rgba(245,196,81,0.18)",
+  yellowLine: "rgba(245,196,81,0.84)",
   buttonBlue:
     "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
 };
 
-export default function ShopProofPage() {
-  const router = useRouter();
-  const [width, setWidth] = useState(1440);
+const INITIAL_FORM: FormState = {
+  customerName: "",
+  customerAddress: "",
+  phone: "",
+  email: "",
+  vin: "",
+  year: "",
+  make: "",
+  model: "",
+  plate: "",
+  mileageIn: "",
+  concern: "",
+  requestedWork: "",
+  notes: "",
+  status: "New Intake",
+  approvalStatus: "Not Sent",
+  advisor: "Thomas",
+  technician: "Unassigned",
+};
 
-  const [vehicles] = useState<VehicleCardData[]>([]);
-  const [approvals] = useState<ApprovalCardData[]>([]);
-  const [activeRepairs] = useState<RepairCardData[]>([]);
-  const [parts] = useState<PartCardData[]>([]);
-  const [techs] = useState<TechCardData[]>([]);
-  const [alerts] = useState<AlertItem[]>([]);
+export default function ShopProofNewPage() {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [width, setWidth] = useState(1440);
+  const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [scanMessage, setScanMessage] = useState(
+    "Use Scan VIN on your phone to capture a VIN plate photo, OCR the VIN, and auto-fill vehicle fields.",
+  );
+  const [isCreating, setIsCreating] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
@@ -148,8 +165,423 @@ export default function ShopProofPage() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const isMobile = width < 920;
-  const isTablet = width >= 920 && width < 1320;
+  useEffect(() => {
+    return () => {
+      if (scanPreviewUrl) URL.revokeObjectURL(scanPreviewUrl);
+    };
+  }, [scanPreviewUrl]);
+
+  const isMobile = width < 820;
+
+  const customerNameState = useMemo(
+    () => evaluateCustomerName(form.customerName),
+    [form.customerName],
+  );
+  const addressState = useMemo(
+    () => evaluateAddress(form.customerAddress),
+    [form.customerAddress],
+  );
+  const phoneState = useMemo(() => evaluatePhone(form.phone), [form.phone]);
+  const vinState = useMemo(() => evaluateVin(form.vin), [form.vin]);
+  const vehicleIdentityState = useMemo(
+    () => evaluateVehicleIdentity(form.year, form.make, form.model),
+    [form.year, form.make, form.model],
+  );
+  const mileageState = useMemo(
+    () => evaluateMileage(form.mileageIn),
+    [form.mileageIn],
+  );
+  const concernState = useMemo(
+    () => evaluateConcern(form.concern),
+    [form.concern],
+  );
+
+  const readinessItems = useMemo<ReadinessItem[]>(
+    () => [
+      {
+        key: "customer",
+        label: "Customer name",
+        tone: customerNameState.tone,
+        status: customerNameState.status,
+      },
+      {
+        key: "address",
+        label: "Customer address",
+        tone: addressState.tone,
+        status: addressState.status,
+      },
+      {
+        key: "phone",
+        label: "Phone number",
+        tone: phoneState.tone,
+        status: phoneState.status,
+      },
+      {
+        key: "vin",
+        label: "VIN",
+        tone: vinState.tone,
+        status: vinState.status,
+      },
+      {
+        key: "vehicle",
+        label: "Year / Make / Model",
+        tone: vehicleIdentityState.tone,
+        status: vehicleIdentityState.status,
+      },
+      {
+        key: "mileage",
+        label: "Mileage in",
+        tone: mileageState.tone,
+        status: mileageState.status,
+      },
+      {
+        key: "concern",
+        label: "Concern",
+        tone: concernState.tone,
+        status: concernState.status,
+      },
+    ],
+    [
+      addressState.status,
+      addressState.tone,
+      concernState.status,
+      concernState.tone,
+      customerNameState.status,
+      customerNameState.tone,
+      mileageState.status,
+      mileageState.tone,
+      phoneState.status,
+      phoneState.tone,
+      vehicleIdentityState.status,
+      vehicleIdentityState.tone,
+      vinState.status,
+      vinState.tone,
+    ],
+  );
+
+  const intakeProgress = useMemo(() => {
+    const toneScore = { red: 0, yellow: 0.5, green: 1 } as const;
+    const total = readinessItems.reduce(
+      (sum, item) => sum + toneScore[item.tone],
+      0,
+    );
+    return Math.round((total / readinessItems.length) * 100);
+  }, [readinessItems]);
+
+  const isReadyToCreate = useMemo(
+    () => readinessItems.every((item) => item.tone === "green"),
+    [readinessItems],
+  );
+
+  const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handlePhoneChange = (value: string) => {
+    updateField("phone", formatPhone(value));
+  };
+
+  const handleVinChange = (value: string) => {
+    updateField("vin", normalizeVin(value));
+  };
+
+  const handleMileageChange = (value: string) => {
+    updateField("mileageIn", formatMileage(value));
+  };
+
+  const handleVinScan = () => {
+    if (isScanning) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleScanFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    if (scanPreviewUrl) URL.revokeObjectURL(scanPreviewUrl);
+    const nextPreview = URL.createObjectURL(file);
+    setScanPreviewUrl(nextPreview);
+
+    setSubmitError(null);
+    setIsScanning(true);
+    setOcrProgress(0);
+    setScanMessage("Reading VIN plate photo...");
+
+    try {
+      const recognizedVin = await scanVinFromImage(file, setOcrProgress);
+
+      setForm((prev) => ({
+        ...prev,
+        vin: recognizedVin,
+      }));
+
+      setScanMessage(`VIN captured: ${recognizedVin}. Decoding vehicle...`);
+
+      const decoded = await decodeVinWithNhtsa(
+        recognizedVin,
+        form.year.trim() || undefined,
+      );
+
+      setForm((prev) => ({
+        ...prev,
+        vin: recognizedVin,
+        year: decoded.year || prev.year,
+        make: decoded.make || prev.make,
+        model: decoded.model || prev.model,
+      }));
+
+      const identity = [decoded.year, decoded.make, decoded.model]
+        .filter(Boolean)
+        .join(" ");
+
+      setScanMessage(
+        identity
+          ? `VIN captured and decoded. ${recognizedVin} → ${identity}`
+          : `VIN captured: ${recognizedVin}. Fill any missing vehicle details if needed.`,
+      );
+    } catch (error) {
+      console.error("VIN scan failed:", error);
+      setScanMessage(
+        error instanceof Error
+          ? error.message
+          : "VIN scan failed. Try a closer, sharper photo of the VIN plate.",
+      );
+    } finally {
+      setIsScanning(false);
+      setOcrProgress(0);
+    }
+  };
+
+  const handlePrefillDemo = async () => {
+    const demoVin = "1FTFW1ET5JKD23466";
+
+    setForm((prev) => ({
+      ...prev,
+      customerName: prev.customerName || "Thomas Dickson",
+      customerAddress:
+        prev.customerAddress || "123 Main Street, Bossier City, LA 71111",
+      phone: prev.phone || formatPhone("3182869339"),
+      email: prev.email || "thomas@example.com",
+      vin: demoVin,
+      plate: "ATP-150",
+      mileageIn: prev.mileageIn || "132,884",
+      concern: prev.concern || "Hard to fill gas tank",
+      requestedWork: prev.requestedWork || "Inspect EVAP / fuel fill concern",
+      notes: prev.notes || "Customer states pump keeps clicking off early.",
+      technician: prev.technician === "Unassigned" ? "Mike" : prev.technician,
+    }));
+
+    try {
+      const decoded = await decodeVinWithNhtsa(demoVin);
+      setForm((prev) => ({
+        ...prev,
+        year: decoded.year || prev.year,
+        make: decoded.make || prev.make,
+        model: decoded.model || prev.model,
+      }));
+      setScanMessage(
+        `Demo VIN decoded through NHTSA: ${[
+          decoded.year,
+          decoded.make,
+          decoded.model,
+        ]
+          .filter(Boolean)
+          .join(" ") || demoVin}`,
+      );
+    } catch {
+      setForm((prev) => ({
+        ...prev,
+        year: prev.year || "2018",
+        make: prev.make || "Ford",
+        model: prev.model || "F-150",
+      }));
+      setScanMessage(
+        "Demo vehicle filled. VIN decode was unavailable, so fallback values were used.",
+      );
+    }
+  };
+
+  const handleSaveDraft = () => {
+    try {
+      sessionStorage.setItem("shopproof-new-job-draft", JSON.stringify(form));
+      setScanMessage("Draft saved locally in this browser session.");
+    } catch {
+      setScanMessage("Draft could not be saved locally on this device.");
+    }
+  };
+
+  async function handleCreateJob() {
+    if (!isReadyToCreate) {
+      setSubmitError("Finish all required intake items before creating the job.");
+      return;
+    }
+
+    setIsCreating(true);
+    setSubmitError(null);
+
+    try {
+      const { data: shops, error: shopError } = await supabase
+        .from("shops")
+        .select("id")
+        .limit(1);
+
+      if (shopError) throw shopError;
+
+      const shopId = (shops as ShopRow[] | null)?.[0]?.id;
+      if (!shopId) throw new Error("No shop record found.");
+
+      let assignedTo: string | null = null;
+
+      if (form.technician && form.technician !== "Unassigned") {
+        const { data: techRow, error: techError } = await supabase
+          .from("team_members")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("name", form.technician)
+          .eq("active", true)
+          .maybeSingle();
+
+        if (techError) throw techError;
+        assignedTo = (techRow as TeamMemberRow | null)?.id ?? null;
+      }
+
+      const normalizedPhone = form.phone.trim();
+      const normalizedEmail = form.email.trim().toLowerCase();
+      const normalizedName = form.customerName.trim();
+      const normalizedAddress = form.customerAddress.trim();
+
+      let customerId: string | null = null;
+
+      if (normalizedPhone) {
+        const { data: phoneMatch, error: phoneLookupError } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("phone", normalizedPhone)
+          .limit(1)
+          .maybeSingle();
+
+        if (phoneLookupError) throw phoneLookupError;
+        customerId = (phoneMatch as CustomerRow | null)?.id ?? null;
+      }
+
+      if (!customerId && normalizedEmail) {
+        const { data: emailMatch, error: emailLookupError } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("email", normalizedEmail)
+          .limit(1)
+          .maybeSingle();
+
+        if (emailLookupError) throw emailLookupError;
+        customerId = (emailMatch as CustomerRow | null)?.id ?? null;
+      }
+
+      if (!customerId && normalizedName && normalizedAddress) {
+        const { data: identityMatch, error: identityLookupError } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("name", normalizedName)
+          .eq("address", normalizedAddress)
+          .limit(1)
+          .maybeSingle();
+
+        if (identityLookupError) throw identityLookupError;
+        customerId = (identityMatch as CustomerRow | null)?.id ?? null;
+      }
+
+      if (!customerId) {
+        const { data: customerRow, error: customerError } = await supabase
+          .from("customers")
+          .insert({
+            shop_id: shopId,
+            name: normalizedName,
+            phone: normalizedPhone,
+            email: normalizedEmail || null,
+            address: normalizedAddress,
+          })
+          .select("id")
+          .single();
+
+        if (customerError) throw customerError;
+        customerId = customerRow?.id ?? null;
+      }
+
+      if (!customerId) throw new Error("Customer could not be created or found.");
+
+      let vehicleId: string | null = null;
+
+      if (form.vin.trim()) {
+        const { data: existingVehicle, error: vehicleLookupError } = await supabase
+          .from("vehicles")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("vin", form.vin.trim())
+          .limit(1)
+          .maybeSingle();
+
+        if (vehicleLookupError) throw vehicleLookupError;
+        vehicleId = existingVehicle?.id ?? null;
+      }
+
+      if (!vehicleId) {
+        const { data: vehicleRow, error: vehicleError } = await supabase
+          .from("vehicles")
+          .insert({
+            shop_id: shopId,
+            customer_id: customerId,
+            year: form.year.trim(),
+            make: form.make.trim(),
+            model: form.model.trim(),
+            vin: form.vin.trim(),
+            plate: form.plate.trim() || null,
+          })
+          .select("id")
+          .single();
+
+        if (vehicleError) throw vehicleError;
+        vehicleId = vehicleRow?.id ?? null;
+      }
+
+      if (!vehicleId) throw new Error("Vehicle was not created or found.");
+
+      const jobNotes = [
+        `Concern: ${form.concern.trim() || "N/A"}`,
+        `Requested Work: ${form.requestedWork.trim() || "N/A"}`,
+        `Internal Notes: ${form.notes.trim() || "N/A"}`,
+        `Mileage In: ${form.mileageIn.trim() || "N/A"}`,
+        `Advisor: ${form.advisor.trim() || "N/A"}`,
+        `Technician: ${form.technician.trim() || "N/A"}`,
+      ].join("\n");
+
+      const { error: jobError } = await supabase.from("jobs").insert({
+        shop_id: shopId,
+        customer_id: customerId,
+        vehicle_id: vehicleId,
+        status: form.status,
+        approval_status: form.approvalStatus,
+        assigned_to: assignedTo,
+        notes: jobNotes,
+      });
+
+      if (jobError) throw jobError;
+
+      router.push("/shopproof/dashboard");
+    } catch (error) {
+      console.error("Create job error:", error);
+      setSubmitError(
+        error instanceof Error ? error.message : "Failed to create job.",
+      );
+    } finally {
+      setIsCreating(false);
+    }
+  }
 
   return (
     <main
@@ -176,18 +608,27 @@ export default function ShopProofPage() {
           ${THEME.pageBase}
         `,
         color: THEME.text,
-        padding: isMobile ? "12px" : "22px",
+        padding: isMobile ? "8px" : "18px",
       }}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleScanFileChange}
+        style={{ display: "none" }}
+      />
+
       <div
         style={{
-          maxWidth: 1410,
+          maxWidth: "1360px",
           margin: "0 auto",
-          borderRadius: 24,
-          overflow: "hidden",
           background: THEME.shell,
           border: THEME.border,
+          borderRadius: "30px",
           boxShadow: THEME.shellShadow,
+          overflow: "hidden",
           position: "relative",
         }}
       >
@@ -196,27 +637,17 @@ export default function ShopProofPage() {
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
-            background: `
-              ${THEME.shellInner},
-              radial-gradient(circle at 50% 0%, rgba(71,123,255,0.14) 0%, rgba(71,123,255,0.05) 20%, rgba(71,123,255,0) 44%),
-              repeating-linear-gradient(
-                135deg,
-                rgba(255,255,255,0.012) 0px,
-                rgba(255,255,255,0.012) 1px,
-                transparent 1px,
-                transparent 9px
-              )
-            `,
-            opacity: 0.95,
+            background:
+              "radial-gradient(circle at 22% 0%, rgba(59,130,246,0.18), transparent 32%), radial-gradient(circle at 78% 0%, rgba(39,217,191,0.10), transparent 24%)",
           }}
         />
 
         <div
           style={{
             position: "absolute",
-            left: 22,
-            right: 22,
-            top: 64,
+            left: isMobile ? 12 : 22,
+            right: isMobile ? 12 : 22,
+            top: isMobile ? 56 : 64,
             height: 2,
             background:
               "linear-gradient(90deg, rgba(59,130,246,0) 0%, rgba(59,130,246,0.38) 22%, rgba(59,130,246,0.72) 50%, rgba(59,130,246,0.38) 78%, rgba(59,130,246,0) 100%)",
@@ -225,199 +656,538 @@ export default function ShopProofPage() {
           }}
         />
 
-        <TopBar
-          isMobile={isMobile}
-          vehicleCount={vehicles.length}
-          partsCount={parts.length}
-          pickupCount={
-            vehicles.filter((vehicle) => vehicle.status === "Ready for Pickup")
-              .length
-          }
-          onCreateCustomer={() => router.push("/shopproof/new")}
-        />
+        <div
+          style={{
+            minHeight: isMobile ? "auto" : 84,
+            padding: isMobile ? "10px 10px 8px" : "15px 18px",
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "auto 1fr auto",
+            gap: isMobile ? 10 : 14,
+            alignItems: "center",
+            borderBottom: `1px solid ${THEME.lineFaint}`,
+            position: "relative",
+            background:
+              "linear-gradient(180deg, rgba(10,20,31,0.86) 0%, rgba(6,13,22,0.5) 100%)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: isMobile ? 10 : 12,
+              minWidth: 0,
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            <div
+              style={{
+                width: isMobile ? 38 : 42,
+                height: isMobile ? 38 : 42,
+                borderRadius: 12,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: THEME.borderSoft,
+                background:
+                  "linear-gradient(180deg, rgba(17,32,48,0.98) 0%, rgba(10,19,29,0.98) 100%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18)",
+                flexShrink: 0,
+              }}
+            >
+              <Shield
+                size={isMobile ? 20 : 22}
+                strokeWidth={2.1}
+                color={THEME.blue}
+              />
+            </div>
+
+            <div
+              style={{
+                fontSize: isMobile ? 18 : 28,
+                lineHeight: 1,
+                fontWeight: 900,
+                letterSpacing: "-0.04em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span style={{ color: THEME.text }}>Shop</span>
+              <span style={{ color: "#78ABFF" }}>PROOF</span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(3, 1fr)",
+              gap: 10,
+              minWidth: 0,
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            <TopStatusBox title="New Job" value="Current Screen" />
+            <TopStatusBox title={`${intakeProgress}%`} value="Intake Ready" />
+            <TopStatusBox
+              title={isReadyToCreate ? "Ready" : "Review"}
+              value="Create Status"
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: isMobile ? "stretch" : "flex-end",
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            <button
+              type="button"
+              style={{
+                ...primaryButton,
+                width: isMobile ? "100%" : undefined,
+                opacity: isCreating ? 0.7 : 1,
+              }}
+              onClick={handleCreateJob}
+              disabled={isCreating}
+            >
+              <Plus size={15} />
+              {isCreating ? "Creating..." : "Create Job"}
+            </button>
+          </div>
+        </div>
 
         <div
           style={{
-            padding: isMobile ? "12px" : "18px",
-            display: "grid",
-            gap: 14,
             position: "relative",
-            zIndex: 1,
+            padding: isMobile ? "14px 10px 16px" : "16px",
           }}
         >
-          <section
+          <div
             style={{
-              display: "grid",
-              gridTemplateColumns: isMobile
-                ? "1fr"
-                : isTablet
-                  ? "1fr"
-                  : "0.92fr 1.52fr 0.84fr",
-              gap: 14,
-              alignItems: "start",
+              background: THEME.panel,
+              border: THEME.borderSoft,
+              borderRadius: "24px",
+              boxShadow: THEME.panelShadow,
+              overflow: "hidden",
             }}
           >
-            <Panel
-              title="Vehicles In Shop"
-              icon={<CarFront size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/vehicles"
+            <div
+              style={{
+                padding: isMobile ? "14px 14px" : "18px 20px",
+                borderBottom: `1px solid ${THEME.lineSoft}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
             >
-              {vehicles.length === 0 ? (
-                <EmptyState
-                  icon={<CarFront size={28} strokeWidth={2.2} color={THEME.blue} />}
-                  title="No vehicles in shop yet"
-                  text="Customer vehicles will appear here once they are added and moved into the shop workflow."
-                  actionLabel="Open Vehicles"
-                  onAction={() => router.push("/shopproof/dashboard/vehicles")}
-                />
-              ) : (
-                <>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {vehicles.map((vehicle) => (
-                      <VehicleCard key={vehicle.id} vehicle={vehicle} />
-                    ))}
-                  </div>
-                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/vehicles")} />
-                </>
-              )}
-            </Panel>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <FileText size={16} color={THEME.textSoft} />
+                <div
+                  style={{
+                    fontWeight: 800,
+                    letterSpacing: "-0.03em",
+                    fontSize: "1.1rem",
+                  }}
+                >
+                  New Job Intake
+                </div>
+              </div>
 
-            <Panel
-              title="Jobs Waiting for Approval"
-              icon={<Bell size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/approvals"
-            >
-              {approvals.length === 0 ? (
-                <EmptyState
-                  icon={<Bell size={28} strokeWidth={2.2} color={THEME.orange} />}
-                  title="No jobs waiting for approval"
-                  text="Pending approvals will show here when customer estimates are ready for review and authorization."
-                  actionLabel="Open Approvals"
-                  onAction={() => router.push("/shopproof/dashboard/approvals")}
-                />
-              ) : (
-                <>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button type="button" style={ghostButton} onClick={() => router.back()}>
+                  <ArrowLeft size={15} />
+                  Back
+                </button>
+                <button type="button" style={ghostButton} onClick={handleSaveDraft}>
+                  <Save size={15} />
+                  Save Draft
+                </button>
+                <button
+                  type="button"
+                  style={{ ...primaryButton, opacity: isCreating ? 0.7 : 1 }}
+                  onClick={handleCreateJob}
+                  disabled={isCreating}
+                >
+                  <Plus size={15} />
+                  {isCreating ? "Creating..." : "Create Job"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ padding: isMobile ? "12px 10px 14px" : "12px" }}>
+              <div style={{ display: "grid", gap: "12px" }}>
+                <SectionCard
+                  icon={<UserCircle2 size={17} />}
+                  title="Customer Info"
+                  subtitle="Who owns the vehicle and how to reach them"
+                  accent="blue"
+                >
+                  <div style={twoColGrid(isMobile)}>
+                    <InputBlock
+                      label="Customer Name"
+                      value={form.customerName}
+                      onChange={(value) => updateField("customerName", value)}
+                      placeholder="Full customer name"
+                      validation={customerNameState.hint}
+                    />
+                    <InputBlock
+                      label="Phone"
+                      value={form.phone}
+                      onChange={handlePhoneChange}
+                      placeholder="(555) 555-5555"
+                      validation={phoneState.hint}
+                    />
+                  </div>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <InputBlock
+                      label="Customer Address"
+                      value={form.customerAddress}
+                      onChange={(value) => updateField("customerAddress", value)}
+                      placeholder="Full address"
+                      validation={addressState.hint}
+                    />
+                  </div>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <InputBlock
+                      label="Email"
+                      value={form.email}
+                      onChange={(value) => updateField("email", value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  icon={<CarFront size={17} />}
+                  title="Vehicle Info"
+                  subtitle="Vehicle identity and front desk intake details"
+                  accent="emerald"
+                >
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: isMobile
-                        ? "1fr"
-                        : "repeat(2, minmax(0, 1fr))",
-                      gap: 10,
+                      gridTemplateColumns: isMobile ? "1fr" : "2fr 220px",
+                      gap: "12px",
+                      alignItems: "end",
                     }}
                   >
-                    {approvals.map((job) => (
-                      <ApprovalCard key={job.id} job={job} />
-                    ))}
+                    <InputBlock
+                      label="VIN"
+                      value={form.vin}
+                      onChange={handleVinChange}
+                      placeholder="17-character VIN"
+                      validation={vinState.hint}
+                    />
+
+                    <div>
+                      <div style={miniLabel}>VIN Tools</div>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          style={{ ...primaryButton, opacity: isScanning ? 0.85 : 1 }}
+                          onClick={handleVinScan}
+                          disabled={isScanning}
+                        >
+                          {isScanning ? (
+                            <LoaderCircle size={15} className="spin" />
+                          ) : (
+                            <ScanLine size={15} />
+                          )}
+                          {isScanning ? "Scanning..." : "Scan VIN"}
+                        </button>
+                        <button
+                          type="button"
+                          style={ghostButton}
+                          onClick={handlePrefillDemo}
+                        >
+                          <Camera size={15} />
+                          Demo Fill
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/approvals")} />
-                </>
-              )}
-            </Panel>
 
-            <Panel
-              title="Active Repairs"
-              icon={<Wrench size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/repairs"
-              headerRight={
-                <div style={{ display: "flex", gap: 6 }}>
-                  <MiniHeaderIcon>
-                    <ChevronLeft size={11} strokeWidth={2.5} />
-                  </MiniHeaderIcon>
-                  <MiniHeaderIcon>
-                    <Bell size={11} strokeWidth={2.2} />
-                  </MiniHeaderIcon>
-                </div>
-              }
-            >
-              {activeRepairs.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={<Wrench size={26} strokeWidth={2.2} color={THEME.blue} />}
-                  title="No active repairs right now"
-                  text="Vehicles currently in service will appear here so the shop can monitor work in progress."
-                  actionLabel="Open Repairs"
-                  onAction={() => router.push("/shopproof/dashboard/repairs")}
-                />
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {activeRepairs.map((repair) => (
-                    <RepairCard key={repair.id} repair={repair} />
-                  ))}
-                </div>
-              )}
-            </Panel>
-          </section>
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      borderRadius: "12px",
+                      border: `1px solid ${THEME.lineFaint}`,
+                      background: "rgba(5,12,20,0.42)",
+                      padding: "10px 12px",
+                      color: THEME.textSoft,
+                      fontSize: "0.84rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {scanMessage}
+                  </div>
 
-          <section
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile
-                ? "1fr"
-                : isTablet
-                  ? "1fr"
-                  : "0.92fr 2.08fr",
-              gap: 14,
-              alignItems: "start",
-            }}
-          >
-            <Panel
-              title="Parts On Order"
-              icon={<Package2 size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/parts"
-            >
-              {parts.length === 0 ? (
-                <EmptyState
-                  icon={<Package2 size={28} strokeWidth={2.2} color={THEME.orange} />}
-                  title="No parts on order"
-                  text="Ordered parts and expected arrivals will appear here once jobs start waiting on inventory."
-                  actionLabel="Open Parts"
-                  onAction={() => router.push("/shopproof/dashboard/parts")}
-                />
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {parts.map((part) => (
-                    <PartsCard key={part.id} part={part} />
-                  ))}
-                </div>
-              )}
-            </Panel>
+                  {(isScanning || scanPreviewUrl) && (
+                    <div style={{ marginTop: "10px", display: "grid", gap: "10px" }}>
+                      {isScanning && (
+                        <div
+                          style={{
+                            borderRadius: "12px",
+                            border: `1px solid ${THEME.lineFaint}`,
+                            background: "rgba(5,12,20,0.42)",
+                            padding: "10px 12px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              height: 8,
+                              borderRadius: 999,
+                              overflow: "hidden",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(255,255,255,0.05)",
+                              marginBottom: 6,
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${Math.max(4, ocrProgress)}%`,
+                                height: "100%",
+                                background:
+                                  "linear-gradient(90deg, rgba(39,217,191,0.95) 0%, rgba(59,130,246,0.95) 100%)",
+                                transition: "width 160ms ease",
+                              }}
+                            />
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.78rem",
+                              color: THEME.textMuted,
+                              fontWeight: 700,
+                            }}
+                          >
+                            OCR progress: {ocrProgress}%
+                          </div>
+                        </div>
+                      )}
 
-            <Panel
-              title="Technician Assignments"
-              icon={<UserCircle2 size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/team"
-              headerRight={
-                <div style={{ display: "flex", gap: 6 }}>
-                  <MiniHeaderIcon>
-                    <ChevronLeft size={11} strokeWidth={2.5} />
-                  </MiniHeaderIcon>
-                  <MiniHeaderIcon>
-                    <Bell size={11} strokeWidth={2.2} />
-                  </MiniHeaderIcon>
-                </div>
-              }
-            >
-              {techs.length === 0 ? (
-                <EmptyState
-                  icon={<UserCircle2 size={28} strokeWidth={2.2} color={THEME.emerald} />}
-                  title="No technician assignments yet"
-                  text="As jobs are assigned to your team, technician workload and repair visibility will populate here."
-                  actionLabel="Open Team Board"
-                  onAction={() => router.push("/shopproof/dashboard/team")}
-                />
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: isMobile ? "1fr" : "1.08fr 1.58fr",
-                    gap: 12,
-                  }}
+                      {scanPreviewUrl && (
+                        <div
+                          style={{
+                            borderRadius: "12px",
+                            border: `1px solid ${THEME.lineFaint}`,
+                            background: "rgba(5,12,20,0.42)",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <img
+                            src={scanPreviewUrl}
+                            alt="VIN scan preview"
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              maxHeight: 180,
+                              objectFit: "contain",
+                              background: "#07111B",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{ ...twoColGrid(isMobile), marginTop: "12px" }}>
+                    <InputBlock
+                      label="Year"
+                      value={form.year}
+                      onChange={(value) =>
+                        updateField("year", digitsOnly(value).slice(0, 4))
+                      }
+                      placeholder="2018"
+                    />
+                    <InputBlock
+                      label="Make"
+                      value={form.make}
+                      onChange={(value) => updateField("make", value)}
+                      placeholder="Ford"
+                    />
+                  </div>
+
+                  <div style={{ ...twoColGrid(isMobile), marginTop: "12px" }}>
+                    <InputBlock
+                      label="Model"
+                      value={form.model}
+                      onChange={(value) => updateField("model", value)}
+                      placeholder="F-150"
+                      validation={vehicleIdentityState.hint}
+                    />
+                    <InputBlock
+                      label="Plate"
+                      value={form.plate}
+                      onChange={(value) => updateField("plate", value.toUpperCase())}
+                      placeholder="License plate"
+                    />
+                  </div>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <InputBlock
+                      label="Mileage In"
+                      value={form.mileageIn}
+                      onChange={handleMileageChange}
+                      placeholder="Current mileage"
+                      validation={mileageState.hint}
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  icon={<Wrench size={17} />}
+                  title="Visit Info"
+                  subtitle="What brought the vehicle in and what the customer is asking for"
+                  accent="orange"
                 >
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {techs.map((tech) => (
-                      <TechRow key={tech.id} tech={tech} />
-                    ))}
+                  <TextAreaBlock
+                    label="Primary Concern"
+                    value={form.concern}
+                    onChange={(value) => updateField("concern", value)}
+                    placeholder="Customer states..."
+                    validation={concernState.hint}
+                  />
+
+                  <div style={{ marginTop: "12px" }}>
+                    <TextAreaBlock
+                      label="Requested Work / Authorization Notes"
+                      value={form.requestedWork}
+                      onChange={(value) => updateField("requestedWork", value)}
+                      placeholder="Requested repairs, diag request, tow-in notes, approvals, etc."
+                    />
+                  </div>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <TextAreaBlock
+                      label="Internal Notes"
+                      value={form.notes}
+                      onChange={(value) => updateField("notes", value)}
+                      placeholder="Internal shop notes..."
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  icon={<CheckCircle2 size={17} />}
+                  title="Assignment"
+                  subtitle="Current intake state and internal shop assignment"
+                  accent="blue"
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                      gap: "12px",
+                    }}
+                  >
+                    <SelectBlock
+                      label="Job Status"
+                      value={form.status}
+                      onChange={(value) => updateField("status", value as JobStatus)}
+                      options={[
+                        "New Intake",
+                        "Waiting on Approval",
+                        "Approved",
+                        "In Progress",
+                        "Waiting on Parts",
+                        "Ready for Pickup",
+                      ]}
+                    />
+                    <SelectBlock
+                      label="Approval Status"
+                      value={form.approvalStatus}
+                      onChange={(value) =>
+                        updateField("approvalStatus", value as ApprovalStatus)
+                      }
+                      options={["Not Sent", "Pending", "Approved"]}
+                    />
+                    <SelectBlock
+                      label="Service Advisor"
+                      value={form.advisor}
+                      onChange={(value) => updateField("advisor", value)}
+                      options={TEAM_MEMBERS.map((member) => member.name)}
+                    />
+                    <SelectBlock
+                      label="Assigned Technician"
+                      value={form.technician}
+                      onChange={(value) => updateField("technician", value)}
+                      options={["Unassigned", ...TEAM_MEMBERS.map((member) => member.name)]}
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  icon={<Shield size={17} />}
+                  title="Intake Readiness"
+                  subtitle="Progress, summary, and missing items in one full-width review block"
+                  accent="blue"
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.95rem",
+                        fontWeight: 800,
+                        color: THEME.textSoft,
+                      }}
+                    >
+                      {intakeProgress}% Intake Ready
+                    </div>
+
+                    <div
+                      style={{
+                        borderRadius: "999px",
+                        padding: "8px 12px",
+                        border: `1px solid ${
+                          isReadyToCreate ? THEME.emeraldLine : THEME.orangeLine
+                        }`,
+                        background: isReadyToCreate
+                          ? THEME.emeraldSoft
+                          : THEME.orangeSoft,
+                        color: isReadyToCreate ? THEME.emerald : THEME.orange,
+                        fontSize: "0.83rem",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {isReadyToCreate ? "Ready to create job" : "Intake in progress"}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      height: "14px",
+                      borderRadius: "999px",
+                      background: "rgba(5,12,20,0.8)",
+                      border: `1px solid ${THEME.lineFaint}`,
+                      overflow: "hidden",
+                      marginBottom: "14px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${intakeProgress}%`,
+                        height: "100%",
+                        background:
+                          intakeProgress >= 100
+                            ? "linear-gradient(90deg, #27D9BF 0%, #4EF0D8 100%)"
+                            : "linear-gradient(90deg, #3B82F6 0%, #72A8FF 100%)",
+                      }}
+                    />
                   </div>
 
                   <div
@@ -426,1457 +1196,1002 @@ export default function ShopProofPage() {
                       gridTemplateColumns: isMobile
                         ? "1fr"
                         : "repeat(3, minmax(0, 1fr))",
-                      gap: 10,
+                      gap: "10px",
+                      marginBottom: "14px",
                     }}
                   >
-                    <ProofFrame
-                      title="Before"
-                      subtitle="Initial condition"
-                      img="/images/driveproof-damage.jpg"
+                    <SummaryTile label="Customer" value={form.customerName || "Not entered"} />
+                    <SummaryTile label="Address" value={form.customerAddress || "Not entered"} />
+                    <SummaryTile
+                      label="Vehicle"
+                      value={
+                        [form.year, form.make, form.model].filter(Boolean).join(" ") ||
+                        "Not entered"
+                      }
                     />
-                    <ProofFrame
-                      title="During"
-                      subtitle="Work in progress"
-                      img="/images/fleetproof-inspection.png"
-                    />
-                    <ProofFrame
-                      title="After"
-                      subtitle="Completed repair"
-                      img="/images/equipment-proof.jpg"
+                    <SummaryTile label="VIN" value={form.vin || "Not entered"} />
+                    <SummaryTile label="Mileage" value={form.mileageIn || "Not entered"} />
+                    <SummaryTile label="Advisor" value={form.advisor || "Not selected"} />
+                    <SummaryTile
+                      label="Technician"
+                      value={form.technician || "Unassigned"}
                     />
                   </div>
-                </div>
-              )}
-            </Panel>
-          </section>
 
-          <section>
-            <Panel
-              title="Alerts & Issues"
-              icon={<AlertTriangle size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/alerts"
-            >
-              {alerts.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={
-                    <AlertTriangle size={26} strokeWidth={2.2} color={THEME.red} />
-                  }
-                  title="No alerts or issues"
-                  text="Warnings, urgent concerns, and high-priority items will surface here when they need attention."
-                  actionLabel="Open Alerts"
-                  onAction={() => router.push("/shopproof/dashboard/alerts")}
-                />
-              ) : (
-                <div style={{ display: "grid", gap: 0 }}>
-                  {alerts.map((alert, index) => (
-                    <AlertRow
-                      key={alert.id}
-                      alert={alert}
-                      isLast={index === alerts.length - 1}
-                    />
-                  ))}
+                  <div
+                    style={{
+                      borderTop: `1px solid ${THEME.lineSoft}`,
+                      paddingTop: "14px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.9rem",
+                        fontWeight: 800,
+                        color: THEME.textSoft,
+                        marginBottom: "10px",
+                      }}
+                    >
+                      Items still needed
+                    </div>
+
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      {readinessItems.map((item) => {
+                        const colors = toneColor(item.tone);
+                        return (
+                          <div
+                            key={item.key}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "12px",
+                              padding: "12px 14px",
+                              borderRadius: "14px",
+                              border: `1px solid ${colors.line}`,
+                              background: colors.soft,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                minWidth: 0,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: "8px",
+                                  height: "8px",
+                                  borderRadius: "999px",
+                                  background: colors.text,
+                                  boxShadow: `0 0 12px ${colors.text}`,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span
+                                style={{
+                                  color: THEME.text,
+                                  fontWeight: 700,
+                                  fontSize: "0.92rem",
+                                }}
+                              >
+                                {item.label}
+                              </span>
+                            </div>
+
+                            <span
+                              style={{
+                                color: colors.text,
+                                fontSize: "0.82rem",
+                                fontWeight: 800,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {item.status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {submitError ? (
+                      <div
+                        style={{
+                          marginTop: "12px",
+                          padding: "10px 12px",
+                          borderRadius: "12px",
+                          background: "rgba(255,107,122,0.12)",
+                          border: "1px solid rgba(255,107,122,0.28)",
+                          color: THEME.red,
+                          fontSize: "0.82rem",
+                          fontWeight: 800,
+                        }}
+                      >
+                        {submitError}
+                      </div>
+                    ) : null}
+                  </div>
+                </SectionCard>
+
+                <div
+                  style={{
+                    background: THEME.card,
+                    border: THEME.borderSoft,
+                    borderRadius: "20px",
+                    padding: isMobile ? "14px 12px" : "16px 18px",
+                    boxShadow: THEME.cardShadow,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "1rem",
+                        fontWeight: 800,
+                        letterSpacing: "-0.03em",
+                      }}
+                    >
+                      Action Bar
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.88rem",
+                        color: THEME.textMuted,
+                        marginTop: "3px",
+                      }}
+                    >
+                      Same layout. Scan added cleanly.
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <button type="button" style={ghostButton} onClick={() => router.back()}>
+                      <ArrowLeft size={15} />
+                      Back
+                    </button>
+                    <button type="button" style={ghostButton} onClick={handleSaveDraft}>
+                      <Save size={15} />
+                      Save Draft
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        ...primaryButton,
+                        opacity: isReadyToCreate && !isCreating ? 1 : 0.82,
+                        cursor:
+                          isReadyToCreate && !isCreating ? "pointer" : "not-allowed",
+                      }}
+                      onClick={handleCreateJob}
+                      disabled={!isReadyToCreate || isCreating}
+                    >
+                      <Plus size={15} />
+                      {isCreating ? "Creating..." : "Create Job"}
+                    </button>
+                  </div>
                 </div>
-              )}
-            </Panel>
-          </section>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      `}</style>
     </main>
   );
 }
 
-function TopBar({
-  isMobile,
-  vehicleCount,
-  partsCount,
-  pickupCount,
-  onCreateCustomer,
-}: {
-  isMobile: boolean;
-  vehicleCount: number;
-  partsCount: number;
-  pickupCount: number;
-  onCreateCustomer: () => void;
-}) {
-  return (
-    <div
-      style={{
-        minHeight: isMobile ? "auto" : 84,
-        padding: isMobile ? "14px 14px 12px" : "15px 18px",
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "auto 1fr auto",
-        gap: isMobile ? 12 : 14,
-        alignItems: "center",
-        borderBottom: `1px solid ${THEME.lineFaint}`,
-        position: "relative",
-        background:
-          "linear-gradient(180deg, rgba(10,20,31,0.86) 0%, rgba(6,13,22,0.5) 100%)",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: `
-            linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.008) 22%, rgba(255,255,255,0) 54%),
-            radial-gradient(circle at 50% 0%, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 24%, rgba(59,130,246,0) 54%)
-          `,
-        }}
-      />
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          minWidth: 0,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 12,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: THEME.borderSoft,
-            background:
-              "linear-gradient(180deg, rgba(17,32,48,0.98) 0%, rgba(10,19,29,0.98) 100%)",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18)",
-            flexShrink: 0,
-          }}
-        >
-          <Shield size={22} strokeWidth={2.1} color={THEME.blue} />
-        </div>
-
-        <div
-          style={{
-            fontSize: isMobile ? 22 : 28,
-            lineHeight: 1,
-            fontWeight: 900,
-            letterSpacing: "-0.04em",
-            whiteSpace: "nowrap",
-            textShadow: "0 2px 18px rgba(0,0,0,0.28)",
-          }}
-        >
-          <span style={{ color: THEME.text }}>Shop</span>
-          <span style={{ color: "#78ABFF" }}>PROOF</span>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 10,
-          minWidth: 0,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <TopMetric value={String(vehicleCount)} label="Vehicles in Shop" />
-        <TopMetric value={String(partsCount)} label="Waiting for Parts" />
-        <TopMetric value={String(pickupCount)} label="Ready for Pickup" />
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: isMobile ? "flex-start" : "flex-end",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <button type="button" style={primaryActionButton} onClick={onCreateCustomer}>
-          <Plus size={13} strokeWidth={2.7} />
-          + Customer
-        </button>
-
-        <SquareActionButton>
-          <Bell size={14} strokeWidth={2.2} />
-        </SquareActionButton>
-
-        <AvatarAction />
-      </div>
-    </div>
-  );
-}
-
-function TopMetric({
+function TopStatusBox({
+  title,
   value,
-  label,
 }: {
+  title: string;
   value: string;
-  label: string;
 }) {
   return (
     <div
       style={{
-        height: 46,
-        borderRadius: 10,
+        minHeight: "56px",
+        borderRadius: "14px",
+        border: `1px solid ${THEME.lineSoft}`,
         background:
-          "linear-gradient(180deg, rgba(21,31,44,0.98) 0%, rgba(13,23,35,0.98) 100%)",
-        border: THEME.borderSoft,
+          "linear-gradient(180deg, rgba(14,27,44,0.72) 0%, rgba(8,16,27,0.62) 100%)",
         display: "flex",
         alignItems: "center",
-        padding: "0 13px",
-        gap: 8,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.12)",
-        minWidth: 0,
-        position: "relative",
-        overflow: "hidden",
+        gap: "8px",
+        padding: "0 14px",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.008) 26%, rgba(255,255,255,0) 60%)",
-        }}
-      />
-
       <span
         style={{
-          fontSize: 18,
-          lineHeight: 1,
           fontWeight: 900,
+          color: THEME.text,
+          fontSize: "0.96rem",
           letterSpacing: "-0.03em",
-          whiteSpace: "nowrap",
-          flexShrink: 0,
-          position: "relative",
-          zIndex: 1,
+        }}
+      >
+        {title}
+      </span>
+      <span
+        style={{
+          color: THEME.textSoft,
+          fontSize: "0.83rem",
+          fontWeight: 700,
+          opacity: 0.92,
         }}
       >
         {value}
       </span>
-
-      <span
-        style={{
-          fontSize: 11,
-          color: THEME.textSoft,
-          fontWeight: 800,
-          lineHeight: 1.05,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          minWidth: 0,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {label}
-      </span>
     </div>
   );
 }
 
-function Panel({
-  title,
+function SectionCard({
   icon,
+  title,
+  subtitle,
+  accent,
   children,
-  headerRight,
-  href,
 }: {
+  icon: ReactNode;
   title: string;
-  icon?: ReactNode;
+  subtitle: string;
+  accent: Accent;
   children: ReactNode;
-  headerRight?: ReactNode;
-  href?: string;
 }) {
-  const router = useRouter();
-
-  const handleClick = () => {
-    if (href) router.push(href);
+  const accentMap = {
+    blue: THEME.blueLine,
+    orange: THEME.orangeLine,
+    emerald: THEME.emeraldLine,
   };
 
   return (
     <section
-      onClick={handleClick}
       style={{
-        borderRadius: 18,
+        background: THEME.card,
+        border: THEME.borderSoft,
+        borderRadius: "20px",
+        boxShadow: THEME.cardShadow,
         overflow: "hidden",
-        background: THEME.panel,
-        border: THEME.border,
-        boxShadow: THEME.panelShadow,
         position: "relative",
-        cursor: href ? "pointer" : "default",
-        transition: "transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
-      }}
-      onMouseEnter={(e) => {
-        if (!href) return;
-        e.currentTarget.style.transform = "translateY(-1px)";
-        e.currentTarget.style.boxShadow = "0 22px 48px rgba(0,0,0,0.28)";
-      }}
-      onMouseLeave={(e) => {
-        if (!href) return;
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = THEME.panelShadow;
       }}
     >
       <div
         style={{
           position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: `${THEME.panelTop}, ${THEME.panelEdgeGlow}`,
-          opacity: 0.95,
+          inset: "0 auto 0 0",
+          width: "3px",
+          background: accentMap[accent],
         }}
       />
 
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 17,
-          pointerEvents: "none",
-          border: "1px solid rgba(255,255,255,0.035)",
-        }}
-      />
-
-      <div
-        style={{
-          height: 50,
-          padding: "0 14px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          borderBottom: `1px solid ${THEME.lineSoft}`,
-          position: "relative",
-          zIndex: 1,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 60%, rgba(255,255,255,0) 100%)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            minWidth: 0,
-          }}
-        >
-          <span
+      <div style={{ padding: "14px 14px 12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+          <div
             style={{
               color: THEME.textSoft,
-              display: "inline-flex",
+              marginTop: "2px",
               flexShrink: 0,
-              opacity: 0.95,
             }}
           >
             {icon}
-          </span>
+          </div>
 
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 15,
-              lineHeight: 1,
-              fontWeight: 900,
-              letterSpacing: "-0.02em",
-              color: THEME.text,
-              whiteSpace: "nowrap",
-              textShadow: "0 2px 10px rgba(0,0,0,0.22)",
-            }}
-          >
-            {title}
-          </h2>
+          <div>
+            <div
+              style={{
+                fontSize: "1.02rem",
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+                color: THEME.text,
+              }}
+            >
+              {title}
+            </div>
+            <div
+              style={{
+                fontSize: "0.86rem",
+                color: THEME.textMuted,
+                marginTop: "2px",
+              }}
+            >
+              {subtitle}
+            </div>
+          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {headerRight}
-          {href ? (
-            <MiniHeaderIcon>
-              <ChevronRight size={12} strokeWidth={2.6} />
-            </MiniHeaderIcon>
-          ) : null}
-        </div>
+        <div style={{ marginTop: "12px" }}>{children}</div>
       </div>
-
-      <div style={{ padding: 12, position: "relative", zIndex: 1 }}>{children}</div>
     </section>
   );
 }
 
-function EmptyState({
-  icon,
-  title,
-  text,
-  actionLabel,
-  compact = false,
-  onAction,
+function InputBlock({
+  label,
+  value,
+  onChange,
+  placeholder,
+  validation,
 }: {
-  icon?: ReactNode;
-  title: string;
-  text: string;
-  actionLabel?: string;
-  compact?: boolean;
-  onAction?: () => void;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  validation?: string;
 }) {
-  const handleAction = (e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    onAction?.();
-  };
+  const hasValidation = Boolean(validation);
 
   return (
-    <div
-      style={{
-        minHeight: compact ? 180 : 250,
-        borderRadius: 14,
-        border: THEME.borderSoft,
-        background: THEME.card,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        padding: compact ? 20 : 28,
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-
-      <div
+    <div>
+      <div style={fieldLabel}>{label}</div>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
         style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: `
-            radial-gradient(circle at 50% 0%, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.05) 20%, rgba(59,130,246,0) 54%),
-            linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 40%)
-          `,
+          ...inputBase,
+          border: hasValidation
+            ? `1px solid ${THEME.redLine}`
+            : `1px solid ${THEME.lineSoft}`,
         }}
       />
-
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          maxWidth: 360,
-          display: "grid",
-          justifyItems: "center",
-        }}
-      >
-        {icon ? (
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: 16,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 14,
-              border: THEME.borderSoft,
-              background:
-                "linear-gradient(180deg, rgba(20,33,47,0.98) 0%, rgba(11,20,30,0.98) 100%)",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 24px rgba(0,0,0,0.16)",
-            }}
-          >
-            {icon}
-          </div>
-        ) : null}
-
-        <div
-          style={{
-            fontSize: compact ? 16 : 18,
-            fontWeight: 900,
-            lineHeight: 1.15,
-            marginBottom: 8,
-            letterSpacing: "-0.03em",
-          }}
-        >
-          {title}
+      {validation ? (
+        <div style={validationRow}>
+          <AlertCircle size={13} />
+          {validation}
         </div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textMuted,
-            lineHeight: 1.55,
-            marginBottom: actionLabel ? 16 : 0,
-            maxWidth: 320,
-          }}
-        >
-          {text}
-        </div>
-
-        {actionLabel ? (
-          <button
-            type="button"
-            onClick={handleAction}
-            style={{
-              height: 38,
-              padding: "0 14px",
-              borderRadius: 10,
-              background:
-                "linear-gradient(180deg, rgba(24,39,56,0.98) 0%, rgba(11,20,30,0.98) 100%)",
-              border: THEME.borderSoft,
-              color: THEME.textSoft,
-              fontSize: 13,
-              fontWeight: 900,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 7,
-              cursor: "pointer",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.14)",
-            }}
-          >
-            {actionLabel}
-            <ChevronRight size={13} strokeWidth={2.4} />
-          </button>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }
 
-function VehicleCard({ vehicle }: { vehicle: VehicleCardData }) {
-  const accent = getAccent(vehicle.accent);
-
-  return (
-    <div
-      style={{
-        minHeight: 108,
-        display: "grid",
-        gridTemplateColumns: "1fr 138px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-      <AccentLine color={accent.line} />
-
-      <div
-        style={{
-          minWidth: 0,
-          paddingLeft: 8,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 10,
-              color: THEME.textMuted,
-              marginBottom: 5,
-              fontWeight: 700,
-              letterSpacing: "0.03em",
-              textTransform: "uppercase",
-            }}
-          >
-            Vehicle
-          </div>
-
-          <div
-            style={{
-              fontSize: 17,
-              lineHeight: 1.03,
-              fontWeight: 900,
-              letterSpacing: "-0.03em",
-              marginBottom: 6,
-            }}
-          >
-            {vehicle.year} {vehicle.make} {vehicle.model}
-          </div>
-
-          <div
-            style={{
-              fontSize: 12,
-              color: THEME.textMuted,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            VIN: {vehicle.vin}
-          </div>
-        </div>
-
-        <VehicleStatusBadge text={vehicle.status} accent={vehicle.accent} />
-      </div>
-
-      <ImageThumb img={vehicle.img} />
-    </div>
-  );
-}
-
-function ApprovalCard({ job }: { job: ApprovalCardData }) {
-  return (
-    <div
-      style={{
-        minHeight: 118,
-        display: "grid",
-        gridTemplateColumns: "1fr 124px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        overflow: "hidden",
-        position: "relative",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-
-      <div
-        style={{
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: 1.04,
-              fontWeight: 900,
-              letterSpacing: "-0.03em",
-              marginBottom: 4,
-            }}
-          >
-            {job.vehicle}
-          </div>
-
-          <div
-            style={{
-              fontSize: 13,
-              color: THEME.textSoft,
-              marginBottom: 7,
-            }}
-          >
-            {job.concern}
-          </div>
-
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: 1,
-              fontWeight: 900,
-              letterSpacing: "-0.03em",
-              marginBottom: 8,
-            }}
-          >
-            Estimate: {job.estimate}
-          </div>
-        </div>
-
-        <ApprovalStatusBadge text={job.status} compact />
-      </div>
-
-      <ImageThumb img={job.img} />
-    </div>
-  );
-}
-
-function RepairCard({ repair }: { repair: RepairCardData }) {
-  const accent = getAccent(repair.accent);
-
-  return (
-    <div
-      style={{
-        minHeight: 102,
-        display: "grid",
-        gridTemplateColumns: "1fr 108px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-      <AccentLine color={accent.line} />
-
-      <div
-        style={{
-          minWidth: 0,
-          paddingLeft: 8,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            marginBottom: 4,
-          }}
-        >
-          {repair.title}
-        </div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textSoft,
-            marginBottom: 7,
-          }}
-        >
-          {repair.vehicle}
-        </div>
-
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 12,
-            color: THEME.textMuted,
-            fontWeight: 800,
-          }}
-        >
-          <Clock3 size={13} strokeWidth={2.2} />
-          Due: {repair.due}
-        </div>
-      </div>
-
-      <ImageThumb img={repair.img} />
-    </div>
-  );
-}
-
-function PartsCard({ part }: { part: PartCardData }) {
-  return (
-    <div
-      style={{
-        minHeight: 92,
-        display: "grid",
-        gridTemplateColumns: "74px 1fr",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-        position: "relative",
-      }}
-    >
-      <CardTexture />
-      <SmallImageThumb img={part.img} />
-
-      <div
-        style={{
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            marginBottom: 3,
-          }}
-        >
-          {part.name}
-        </div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textSoft,
-            marginBottom: 6,
-          }}
-        >
-          {part.vehicle}
-        </div>
-
-        <div
-          style={{
-            fontSize: 12,
-            color: THEME.textMuted,
-            fontWeight: 800,
-          }}
-        >
-          Due: {part.due}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TechRow({ tech }: { tech: TechCardData }) {
-  return (
-    <div
-      style={{
-        minHeight: 66,
-        display: "grid",
-        gridTemplateColumns: "58px 1fr 112px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        overflow: "hidden",
-        alignItems: "center",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-        position: "relative",
-      }}
-    >
-      <CardTexture />
-
-      <img
-        src={tech.avatar}
-        alt=""
-        style={{
-          width: 50,
-          height: 50,
-          borderRadius: 999,
-          objectFit: "cover",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "#1B2B3B",
-          position: "relative",
-          zIndex: 1,
-        }}
-      />
-
-      <div style={{ minWidth: 0, position: "relative", zIndex: 1 }}>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 900,
-            marginBottom: 2,
-          }}
-        >
-          {tech.name}
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textSoft,
-            marginBottom: 2,
-          }}
-        >
-          {tech.role}
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: THEME.textMuted,
-            fontWeight: 800,
-          }}
-        >
-          {tech.vehicle}
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 12,
-          color: THEME.textSoft,
-          lineHeight: 1.35,
-          fontWeight: 800,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {tech.role}
-        <br />
-        {tech.vehicle}
-      </div>
-    </div>
-  );
-}
-
-function ProofFrame({
-  title,
-  subtitle,
-  img,
+function TextAreaBlock({
+  label,
+  value,
+  onChange,
+  placeholder,
+  validation,
 }: {
-  title: string;
-  subtitle: string;
-  img: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  validation?: string;
+}) {
+  const hasValidation = Boolean(validation);
+
+  return (
+    <div>
+      <div style={fieldLabel}>{label}</div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          ...inputBase,
+          minHeight: "116px",
+          resize: "vertical",
+          paddingTop: 12,
+          border: hasValidation
+            ? `1px solid ${THEME.redLine}`
+            : `1px solid ${THEME.lineSoft}`,
+          fontFamily: "inherit",
+        }}
+      />
+      {validation ? (
+        <div style={validationRow}>
+          <AlertCircle size={13} />
+          {validation}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SelectBlock({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <div>
+      <div style={fieldLabel}>{label}</div>
+      <div style={{ position: "relative" }}>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{
+            ...inputBase,
+            appearance: "none",
+            WebkitAppearance: "none",
+            MozAppearance: "none",
+            paddingRight: 40,
+          }}
+        >
+          {options.map((option) => (
+            <option
+              key={option}
+              value={option}
+              style={{ background: "#08111B", color: "#F5FAFF" }}
+            >
+              {option}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={14}
+          strokeWidth={2.4}
+          color={THEME.textMuted}
+          style={{
+            position: "absolute",
+            right: 12,
+            top: "50%",
+            transform: "translateY(-50%)",
+            pointerEvents: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
 }) {
   return (
     <div
       style={{
-        minHeight: 204,
-        borderRadius: 14,
-        overflow: "hidden",
-        position: "relative",
-        border: THEME.borderSoft,
-        background: "#101D2A",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <img
-        src={img}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          filter: "contrast(1.05) saturate(0.95) brightness(0.9)",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `
-            linear-gradient(180deg, rgba(7,14,22,0.12) 0%, rgba(7,14,22,0.06) 24%, rgba(7,14,22,0.26) 54%, rgba(7,14,22,0.46) 100%),
-            linear-gradient(90deg, rgba(8,15,24,0.36) 0%, rgba(8,15,24,0.06) 40%, rgba(8,15,24,0.18) 100%)
-          `,
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 13,
-          border: "1px solid rgba(255,255,255,0.04)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          left: 12,
-          top: 10,
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            marginBottom: 4,
-            textShadow: "0 2px 10px rgba(0,0,0,0.3)",
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: THEME.textSoft,
-          }}
-        >
-          {subtitle}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AlertRow({
-  alert,
-  isLast,
-}: {
-  alert: AlertItem;
-  isLast: boolean;
-}) {
-  const toneColor = alert.tone === "warning" ? THEME.orange : THEME.red;
-  const toneSoft = alert.tone === "warning" ? THEME.orangeSoft : THEME.redSoft;
-
-  return (
-    <div
-      style={{
-        minHeight: 50,
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "0 12px",
-        borderBottom: isLast ? "none" : `1px solid ${THEME.lineSoft}`,
+        borderRadius: "14px",
+        border: `1px solid ${THEME.lineSoft}`,
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.01) 0%, rgba(255,255,255,0) 100%)",
+          "linear-gradient(180deg, rgba(8,16,27,0.78) 0%, rgba(5,12,20,0.7) 100%)",
+        padding: "12px 12px",
       }}
     >
-      <span
+      <div
         style={{
-          width: 16,
-          height: 16,
-          borderRadius: 999,
-          background: toneSoft,
-          border: `1px solid ${toneColor}66`,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          boxShadow: `0 0 12px ${toneColor}20`,
+          color: THEME.textMuted,
+          fontSize: "0.78rem",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          marginBottom: "6px",
         }}
       >
-        <Bell size={9} strokeWidth={2.5} color={toneColor} />
-      </span>
-
-      <span
+        {label}
+      </div>
+      <div
         style={{
-          fontSize: 13,
-          color: THEME.textSoft,
+          color: THEME.text,
+          fontSize: "0.94rem",
           fontWeight: 800,
           lineHeight: 1.35,
-          minWidth: 0,
+          wordBreak: "break-word",
         }}
       >
-        {alert.text}
-      </span>
-
-      <ChevronRight
-        size={16}
-        strokeWidth={2.3}
-        color={THEME.textDim}
-        style={{ marginLeft: "auto", flexShrink: 0 }}
-      />
+        {value}
+      </div>
     </div>
   );
 }
 
-function ImageThumb({ img }: { img: string }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        borderRadius: 12,
-        overflow: "hidden",
-        minHeight: 90,
-        border: "1px solid rgba(255,255,255,0.09)",
-        background: THEME.thumb,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.03), 0 10px 18px rgba(0,0,0,0.18)",
-      }}
-    >
-      <img
-        src={img}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          filter: "contrast(1.06) saturate(0.92) brightness(0.92)",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `
-            linear-gradient(90deg, rgba(12,21,31,0.42) 0%, rgba(12,21,31,0.08) 42%, rgba(12,21,31,0.28) 100%),
-            linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 36%)
-          `,
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 11,
-          border: "1px solid rgba(255,255,255,0.035)",
-          pointerEvents: "none",
-        }}
-      />
-    </div>
-  );
-}
-
-function SmallImageThumb({ img }: { img: string }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: 70,
-        minHeight: 70,
-        borderRadius: 12,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.09)",
-        background: THEME.thumb,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.03), 0 8px 16px rgba(0,0,0,0.16)",
-        zIndex: 1,
-      }}
-    >
-      <img
-        src={img}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          filter: "contrast(1.05) saturate(0.92) brightness(0.92)",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(13,24,36,0.16) 38%, rgba(13,24,36,0.3) 100%)",
-        }}
-      />
-    </div>
-  );
-}
-
-function PanelFooter({ onClick }: { onClick?: () => void }) {
-  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    onClick?.();
+function twoColGrid(isMobile: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+    gap: "12px",
   };
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        marginTop: 12,
-      }}
-    >
-      <button
-        type="button"
-        onClick={handleClick}
-        style={{
-          height: 34,
-          minWidth: 118,
-          borderRadius: 10,
-          background:
-            "linear-gradient(180deg, rgba(22,33,47,0.98) 0%, rgba(12,21,31,0.98) 100%)",
-          border: THEME.borderSoft,
-          color: THEME.textSoft,
-          fontSize: 12,
-          fontWeight: 800,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          cursor: "pointer",
-          boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 16px rgba(0,0,0,0.14)",
-        }}
-      >
-        View All
-        <ChevronRight size={13} strokeWidth={2.4} />
-      </button>
-    </div>
-  );
 }
 
-function VehicleStatusBadge({
-  text,
-  accent,
-}: {
-  text: string;
-  accent: Accent;
-}) {
-  const tone = getAccent(accent);
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        alignSelf: "flex-start",
-        maxWidth: "100%",
-        minHeight: 28,
-        padding: "0 10px",
-        borderRadius: 8,
-        background: tone.soft,
-        color: tone.color,
-        border: `1px solid ${tone.border}`,
-        fontSize: 12,
-        fontWeight: 900,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        lineHeight: 1,
-        boxShadow: `0 0 14px ${tone.glow}`,
-      }}
-      title={text}
-    >
-      {text}
-    </span>
-  );
-}
-
-function ApprovalStatusBadge({
-  text,
-  compact = false,
-}: {
-  text: ApprovalStatus;
-  compact?: boolean;
-}) {
-  const tone = getApprovalTone(text);
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        alignSelf: "flex-start",
-        maxWidth: "100%",
-        minHeight: compact ? 24 : 28,
-        padding: compact ? "0 8px" : "0 10px",
-        borderRadius: 8,
-        background: tone.soft,
-        color: tone.color,
-        border: `1px solid ${tone.border}`,
-        fontSize: compact ? 11 : 12,
-        fontWeight: 900,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        lineHeight: 1,
-        boxShadow: `0 0 14px ${tone.glow}`,
-      }}
-      title={text}
-    >
-      {text}
-    </span>
-  );
-}
-
-function AccentLine({ color }: { color: string }) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 3,
-        background: color,
-        boxShadow: `0 0 12px ${color}`,
-      }}
-    />
-  );
-}
-
-function CardTexture() {
-  return (
-    <>
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: THEME.cardTop,
-          opacity: 0.95,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 13,
-          pointerEvents: "none",
-          border: "1px solid rgba(255,255,255,0.03)",
-        }}
-      />
-    </>
-  );
-}
-
-function SquareActionButton({ children }: { children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        width: 40,
-        height: 40,
-        borderRadius: 10,
-        border: THEME.borderSoft,
-        background:
-          "linear-gradient(180deg, rgba(18,29,41,0.98) 0%, rgba(10,18,28,0.98) 100%)",
-        color: THEME.textSoft,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.14)",
-        flexShrink: 0,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function MiniHeaderIcon({ children }: { children: ReactNode }) {
-  return (
-    <span
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        border: THEME.borderSoft,
-        background:
-          "linear-gradient(180deg, rgba(18,29,41,0.98) 0%, rgba(10,18,28,0.98) 100%)",
-        color: THEME.textSoft,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 16px rgba(0,0,0,0.12)",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function AvatarAction() {
-  return (
-    <button
-      type="button"
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        height: 40,
-        padding: "0 9px 0 7px",
-        borderRadius: 12,
-        border: THEME.borderSoft,
-        background:
-          "linear-gradient(180deg, rgba(18,29,41,0.98) 0%, rgba(10,18,28,0.98) 100%)",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 7,
-        cursor: "pointer",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.14)",
-        flexShrink: 0,
-      }}
-    >
-      <img
-        src="/images/proof-platform.png"
-        alt=""
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: 999,
-          objectFit: "cover",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "#1B2B3B",
-        }}
-      />
-      <ChevronDown size={13} strokeWidth={2.4} color={THEME.textSoft} />
-    </button>
-  );
-}
-
-function getAccent(accent: Accent) {
-  if (accent === "orange") {
+function toneColor(tone: StatusTone) {
+  if (tone === "green") {
     return {
-      color: THEME.orange,
-      soft: THEME.orangeSoft,
-      line: THEME.orangeLine,
-      border: "rgba(245,158,66,0.34)",
-      glow: "rgba(245,158,66,0.18)",
-    };
-  }
-
-  if (accent === "emerald") {
-    return {
-      color: THEME.emerald,
+      text: THEME.emerald,
       soft: THEME.emeraldSoft,
       line: THEME.emeraldLine,
-      border: "rgba(39,217,191,0.34)",
-      glow: "rgba(39,217,191,0.18)",
+    };
+  }
+
+  if (tone === "yellow") {
+    return {
+      text: THEME.yellow,
+      soft: THEME.yellowSoft,
+      line: THEME.yellowLine,
     };
   }
 
   return {
-    color: THEME.blue,
-    soft: THEME.blueSoft,
-    line: THEME.blueLine,
-    border: "rgba(59,130,246,0.34)",
-    glow: "rgba(59,130,246,0.18)",
+    text: THEME.red,
+    soft: THEME.redSoft,
+    line: THEME.redLine,
   };
 }
 
-function getApprovalTone(status: ApprovalStatus) {
-  if (status === "Approved") {
+function evaluateCustomerName(value: string): FieldState {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
     return {
-      color: THEME.emerald,
-      soft: THEME.emeraldSoft,
-      border: "rgba(39,217,191,0.34)",
-      glow: "rgba(39,217,191,0.18)",
+      tone: "red",
+      status: "Missing",
+      hint: "Required for intake.",
     };
   }
 
-  if (status === "Repairing") {
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+
+  if (parts.length < 2) {
     return {
-      color: THEME.orange,
-      soft: THEME.orangeSoft,
-      border: "rgba(245,158,66,0.34)",
-      glow: "rgba(245,158,66,0.18)",
+      tone: "yellow",
+      status: "Partial",
+      hint: "Enter first and last name.",
     };
   }
 
   return {
-    color: THEME.orange,
-    soft: THEME.orangeSoft,
-    border: "rgba(245,158,66,0.34)",
-    glow: "rgba(245,158,66,0.18)",
+    tone: "green",
+    status: "Ready",
   };
 }
 
-const primaryActionButton: CSSProperties = {
-  height: 40,
-  padding: "0 14px",
-  borderRadius: 10,
-  background: THEME.buttonBlue,
-  border: "1px solid rgba(59,130,246,0.34)",
-  color: "#F7FBFF",
-  fontSize: 13,
-  fontWeight: 900,
+function evaluateAddress(value: string): FieldState {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      tone: "red",
+      status: "Missing",
+      hint: "Required for intake.",
+    };
+  }
+
+  if (trimmed.length < 8) {
+    return {
+      tone: "yellow",
+      status: "Partial",
+      hint: "Enter the customer's full address.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+  };
+}
+
+function evaluatePhone(value: string): FieldState {
+  const digits = value.replace(/\D/g, "");
+
+  if (!digits) {
+    return {
+      tone: "red",
+      status: "Missing",
+      hint: "Required for intake.",
+    };
+  }
+
+  if (digits.length < 10) {
+    return {
+      tone: "yellow",
+      status: "Partial",
+      hint: "Enter a 10-digit phone number.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+  };
+}
+
+function evaluateVin(value: string): FieldState {
+  if (!value.trim()) {
+    return {
+      tone: "red",
+      status: "Missing",
+      hint: "Required for intake.",
+    };
+  }
+
+  if (!isValidVin(value.trim())) {
+    return {
+      tone: "yellow",
+      status: "Review",
+      hint: "Enter or scan the 17-character VIN.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+  };
+}
+
+function evaluateVehicleIdentity(
+  year: string,
+  make: string,
+  model: string,
+): FieldState {
+  const count = [year, make, model].filter((item) => item.trim()).length;
+
+  if (count === 0) {
+    return {
+      tone: "red",
+      status: "Missing",
+      hint: "Add year, make, and model.",
+    };
+  }
+
+  if (count < 3) {
+    return {
+      tone: "yellow",
+      status: "Partial",
+      hint: "Add year, make, and model.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+  };
+}
+
+function evaluateMileage(value: string): FieldState {
+  if (!value.trim()) {
+    return {
+      tone: "red",
+      status: "Missing",
+      hint: "Mileage in is required.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+  };
+}
+
+function evaluateConcern(value: string): FieldState {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      tone: "red",
+      status: "Missing",
+      hint: "Required for intake.",
+    };
+  }
+
+  if (trimmed.length < 8) {
+    return {
+      tone: "yellow",
+      status: "Partial",
+      hint: "Add enough detail for intake.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+  };
+}
+
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function formatMileage(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  return Number(digits).toLocaleString("en-US");
+}
+
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function normalizeVin(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .replace(/[IOQ]/g, "")
+    .slice(0, 17);
+}
+
+function normalizeVinCandidate(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .replace(/O/g, "0")
+    .replace(/Q/g, "0")
+    .replace(/I/g, "1");
+}
+
+function isValidVin(value: string) {
+  return /^[A-HJ-NPR-Z0-9]{17}$/.test(value);
+}
+
+async function decodeVinWithNhtsa(
+  vin: string,
+  modelYear?: string,
+): Promise<VehicleDecode> {
+  const cleanVin = normalizeVin(vin);
+
+  if (!isValidVin(cleanVin)) {
+    throw new Error("VIN decode could not run because the VIN is invalid.");
+  }
+
+  const yearSegment = modelYear?.trim()
+    ? `/${encodeURIComponent(modelYear.trim())}`
+    : "";
+  const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(
+    cleanVin,
+  )}${yearSegment}?format=json`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("VIN decode service is unavailable right now.");
+  }
+
+  const payload = await response.json();
+  const row = Array.isArray(payload?.Results) ? payload.Results[0] : null;
+
+  const year = String(row?.ModelYear ?? "").trim();
+  const make = String(row?.Make ?? "").trim();
+  const model = String(row?.Model ?? "").trim();
+
+  return {
+    year: year && year !== "0" ? year : "",
+    make: make && make.toLowerCase() !== "not applicable" ? toTitleCase(make) : "",
+    model: model && model.toLowerCase() !== "not applicable" ? model : "",
+  };
+}
+
+async function scanVinFromImage(
+  file: File,
+  onProgress?: (progress: number) => void,
+): Promise<string> {
+  const { createWorker } = await import("tesseract.js");
+
+  const worker = await createWorker("eng", 1, {
+    logger: (message: { progress?: number }) => {
+      if (typeof message.progress === "number") {
+        onProgress?.(Math.round(message.progress * 100));
+      }
+    },
+  });
+
+  try {
+    await worker.setParameters({
+      tessedit_char_whitelist: "ABCDEFGHJKLMNPRSTUVWXYZ0123456789",
+      preserve_interword_spaces: "0",
+    });
+
+    const processedCanvas = await preprocessVinImage(file);
+    const firstPass = await worker.recognize(processedCanvas);
+    let text = firstPass.data.text || "";
+    let bestVin = extractBestVin(text);
+
+    if (!bestVin) {
+      const rawImage = await loadImage(file);
+      const secondPass = await worker.recognize(rawImage);
+      text = `${text}\n${secondPass.data.text || ""}`;
+      bestVin = extractBestVin(text);
+    }
+
+    if (!bestVin) {
+      throw new Error(
+        "Could not read a valid VIN from that photo. Try a closer, sharper photo with the VIN plate filling most of the frame.",
+      );
+    }
+
+    return bestVin;
+  } finally {
+    await worker.terminate();
+    onProgress?.(100);
+  }
+}
+
+async function preprocessVinImage(file: File): Promise<HTMLCanvasElement> {
+  const image = await loadImage(file);
+
+  const maxWidth = 2200;
+  const scale = image.width > maxWidth ? maxWidth / image.width : 1;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not prepare image for OCR.");
+
+  ctx.drawImage(image, 0, 0, width, height);
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const gray =
+      data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    const contrasted = gray > 135 ? 255 : 0;
+    data[i] = contrasted;
+    data[i + 1] = contrasted;
+    data[i + 2] = contrasted;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image could not be loaded."));
+    };
+
+    image.src = url;
+  });
+}
+
+function extractBestVin(text: string): string | null {
+  const uppercase = text.toUpperCase();
+
+  const lines = uppercase
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const candidatePool = new Set<string>();
+
+  for (const line of lines) {
+    const compact = normalizeVinCandidate(line);
+    collectWindows(compact, candidatePool);
+  }
+
+  const wholeCompact = normalizeVinCandidate(uppercase);
+  collectWindows(wholeCompact, candidatePool);
+
+  const valid = Array.from(candidatePool).filter((candidate) => {
+    return isValidVin(candidate) && /[A-Z]/.test(candidate) && /\d/.test(candidate);
+  });
+
+  if (valid.length === 0) return null;
+
+  valid.sort((a, b) => scoreVinCandidate(b) - scoreVinCandidate(a));
+  return valid[0] ?? null;
+}
+
+function collectWindows(source: string, target: Set<string>) {
+  if (source.length < 17) return;
+  for (let i = 0; i <= source.length - 17; i += 1) {
+    target.add(source.slice(i, i + 17));
+  }
+}
+
+function scoreVinCandidate(vin: string) {
+  let score = 0;
+  if (/^\d/.test(vin)) score += 1;
+  if (/\d{4,}/.test(vin)) score += 1;
+  if (/[A-HJ-NPR-Z]{5,}/.test(vin)) score += 1;
+  if (!/[UVWXYZ]{6,}/.test(vin)) score += 1;
+  return score;
+}
+
+function toTitleCase(value: string) {
+  return value
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+const fieldLabel: CSSProperties = {
+  fontSize: "0.77rem",
+  fontWeight: 800,
+  color: THEME.text,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  marginBottom: "6px",
+};
+
+const miniLabel: CSSProperties = {
+  ...fieldLabel,
+  marginBottom: "8px",
+};
+
+const inputBase: CSSProperties = {
+  width: "100%",
+  borderRadius: "14px",
+  background:
+    "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(4,10,18,1) 100%)",
+  color: THEME.text,
+  padding: "13px 14px",
+  fontSize: "0.95rem",
+  outline: "none",
+  boxSizing: "border-box",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
+};
+
+const validationRow: CSSProperties = {
+  marginTop: "7px",
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  color: THEME.red,
+  fontSize: "0.8rem",
+  fontWeight: 700,
+};
+
+const ghostButton: CSSProperties = {
+  border: `1px solid ${THEME.lineSoft}`,
+  background:
+    "linear-gradient(180deg, rgba(10,20,33,0.92) 0%, rgba(7,13,22,0.96) 100%)",
+  color: THEME.text,
+  borderRadius: "14px",
+  padding: "11px 14px",
+  fontSize: "0.9rem",
+  fontWeight: 800,
+  cursor: "pointer",
   display: "inline-flex",
   alignItems: "center",
-  gap: 7,
+  gap: "8px",
+};
+
+const primaryButton: CSSProperties = {
+  border: "1px solid rgba(89,155,255,0.8)",
+  background: THEME.buttonBlue,
+  color: "#F7FBFF",
+  borderRadius: "14px",
+  padding: "11px 14px",
+  fontSize: "0.9rem",
+  fontWeight: 800,
   cursor: "pointer",
-  boxShadow:
-    "inset 0 1px 0 rgba(255,255,255,0.12), 0 0 18px rgba(59,130,246,0.22), 0 10px 20px rgba(0,0,0,0.16)",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "8px",
+  boxShadow: "0 10px 24px rgba(29,107,229,0.28)",
 };

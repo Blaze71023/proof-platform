@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import {
   AlertTriangle,
   Bell,
+  Boxes,
   CarFront,
   ChevronDown,
   ChevronLeft,
@@ -13,6 +16,7 @@ import {
   Package2,
   Plus,
   Shield,
+  ShoppingCart,
   UserCircle2,
   Wrench,
 } from "lucide-react";
@@ -68,6 +72,14 @@ interface PartCardData {
   img: string;
 }
 
+interface InventoryItemData {
+  id: string;
+  name: string;
+  stock: string;
+  threshold: string;
+  accent: Accent;
+}
+
 interface TechCardData {
   id: string;
   name: string;
@@ -81,6 +93,31 @@ interface AlertItem {
   text: string;
   tone: "warning" | "danger";
 }
+
+type VehicleRow = {
+  id: string;
+  shop_id: string | null;
+  customer_id: string | null;
+  year: string | null;
+  make: string | null;
+  model: string | null;
+  vin: string | null;
+  plate: string | null;
+  created_at: string | null;
+};
+
+type JobRow = {
+  id: string;
+  shop_id: string | null;
+  customer_id: string | null;
+  vehicle_id: string | null;
+  status: string | null;
+  approval_status: string | null;
+  assigned_to: string | null;
+  notes: string | null;
+  created_at: string | null;
+  vehicle: VehicleRow | VehicleRow[] | null;
+};
 
 const THEME = {
   pageBase:
@@ -129,13 +166,16 @@ const THEME = {
     "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
 };
 
-export default function ShopProofPage() {
+export default function ShopProofDashboardPage() {
+  const router = useRouter();
   const [width, setWidth] = useState(1440);
 
-  const [vehicles] = useState<VehicleCardData[]>([]);
-  const [approvals] = useState<ApprovalCardData[]>([]);
-  const [activeRepairs] = useState<RepairCardData[]>([]);
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+
   const [parts] = useState<PartCardData[]>([]);
+  const [inventory] = useState<InventoryItemData[]>([]);
   const [techs] = useState<TechCardData[]>([]);
   const [alerts] = useState<AlertItem[]>([]);
 
@@ -146,8 +186,140 @@ export default function ShopProofPage() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchDashboardJobs() {
+      setLoadingJobs(true);
+      setJobsError(null);
+
+      const { data, error } = await supabase
+        .from("jobs")
+        .select(`
+          id,
+          shop_id,
+          customer_id,
+          vehicle_id,
+          status,
+          approval_status,
+          assigned_to,
+          notes,
+          created_at,
+          vehicle:vehicles!jobs_vehicle_id_fkey (
+            id,
+            shop_id,
+            customer_id,
+            year,
+            make,
+            model,
+            vin,
+            plate,
+            created_at
+          )
+        `)
+        .order("created_at", { ascending: false });
+
+      if (!isMounted) return;
+
+      if (error) {
+        console.error("Error fetching dashboard jobs:", error);
+        setJobs([]);
+        setJobsError(error.message);
+      } else {
+        setJobs((data as JobRow[]) || []);
+      }
+
+      setLoadingJobs(false);
+    }
+
+    fetchDashboardJobs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const isMobile = width < 920;
   const isTablet = width >= 920 && width < 1320;
+
+  const normalizedJobs = useMemo(() => {
+    return jobs.map((job) => {
+      const vehicle = Array.isArray(job.vehicle) ? job.vehicle[0] ?? null : job.vehicle;
+      return {
+        ...job,
+        vehicle,
+      };
+    });
+  }, [jobs]);
+
+  const vehicles = useMemo<VehicleCardData[]>(() => {
+    return normalizedJobs
+      .filter((job) => {
+        const status = normalizeVehicleStatus(job.status);
+        return !!job.vehicle && !!status;
+      })
+      .map((job) => {
+        const vehicle = job.vehicle as VehicleRow;
+        const status = normalizeVehicleStatus(job.status) as VehicleStatus;
+
+        return {
+          id: job.id,
+          year: vehicle.year || "",
+          make: vehicle.make || "",
+          model: vehicle.model || "",
+          vin: vehicle.vin || "No VIN",
+          status,
+          accent: getVehicleAccent(status),
+          img: getVehicleImage(status),
+        };
+      });
+  }, [normalizedJobs]);
+
+  const approvals = useMemo<ApprovalCardData[]>(() => {
+    return normalizedJobs
+      .filter((job) => {
+        const approvalStatus = normalizeApprovalStatus(job.approval_status);
+        return !!job.vehicle && approvalStatus === "Pending Approval";
+      })
+      .map((job) => {
+        const vehicle = job.vehicle as VehicleRow;
+        const vehicleLabel = formatVehicleLabel(vehicle);
+        const concern = job.notes?.trim() || "Estimate details pending";
+        const approvalStatus = normalizeApprovalStatus(job.approval_status) as ApprovalStatus;
+
+        return {
+          id: job.id,
+          vehicle: vehicleLabel,
+          concern,
+          estimate: "Pending Estimate",
+          status: approvalStatus,
+          accent: "orange",
+          img: getApprovalImage(),
+        };
+      });
+  }, [normalizedJobs]);
+
+  const activeRepairs = useMemo<RepairCardData[]>(() => {
+    return normalizedJobs
+      .filter((job) => {
+        const status = normalizeVehicleStatus(job.status);
+        return status === "In Progress" || status === "Waiting on Parts" || status === "Diagnostics";
+      })
+      .map((job) => {
+        const vehicle = job.vehicle as VehicleRow | null;
+        const status = normalizeVehicleStatus(job.status) as VehicleStatus;
+        const created = formatDueText(job.created_at);
+
+        return {
+          id: job.id,
+          title: status,
+          vehicle: vehicle ? formatVehicleLabel(vehicle) : "Unknown Vehicle",
+          due: created,
+          accent: status === "Waiting on Parts" ? "orange" : "blue",
+          img: getRepairImage(status),
+        };
+      });
+  }, [normalizedJobs]);
 
   return (
     <main
@@ -228,9 +400,9 @@ export default function ShopProofPage() {
           vehicleCount={vehicles.length}
           partsCount={parts.length}
           pickupCount={
-            vehicles.filter((vehicle) => vehicle.status === "Ready for Pickup")
-              .length
+            vehicles.filter((vehicle) => vehicle.status === "Ready for Pickup").length
           }
+          onCreateJob={() => router.push("/shopproof/new")}
         />
 
         <div
@@ -257,13 +429,29 @@ export default function ShopProofPage() {
             <Panel
               title="Vehicles In Shop"
               icon={<CarFront size={15} strokeWidth={2.2} />}
+              href="/shopproof/dashboard/vehicles"
             >
-              {vehicles.length === 0 ? (
+              {loadingJobs ? (
+                <EmptyState
+                  icon={<CarFront size={28} strokeWidth={2.2} color={THEME.blue} />}
+                  title="Loading live shop vehicles"
+                  text="Pulling active vehicle jobs from Supabase now."
+                />
+              ) : jobsError ? (
+                <EmptyState
+                  icon={<AlertTriangle size={28} strokeWidth={2.2} color={THEME.red} />}
+                  title="Could not load vehicles"
+                  text={`Live job data did not load. ${jobsError}`}
+                  actionLabel="Open Vehicles"
+                  onAction={() => router.push("/shopproof/dashboard/vehicles")}
+                />
+              ) : vehicles.length === 0 ? (
                 <EmptyState
                   icon={<CarFront size={28} strokeWidth={2.2} color={THEME.blue} />}
                   title="No vehicles in shop yet"
-                  text="Customer vehicles will appear here once they are added and moved into the shop workflow."
-                  actionLabel="Open Customer Intake"
+                  text="Customer vehicles will appear here once jobs are created and moved into the shop workflow."
+                  actionLabel="Open Vehicles"
+                  onAction={() => router.push("/shopproof/dashboard/vehicles")}
                 />
               ) : (
                 <>
@@ -272,7 +460,7 @@ export default function ShopProofPage() {
                       <VehicleCard key={vehicle.id} vehicle={vehicle} />
                     ))}
                   </div>
-                  <PanelFooter />
+                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/vehicles")} />
                 </>
               )}
             </Panel>
@@ -280,13 +468,29 @@ export default function ShopProofPage() {
             <Panel
               title="Jobs Waiting for Approval"
               icon={<Bell size={15} strokeWidth={2.2} />}
+              href="/shopproof/dashboard/approvals"
             >
-              {approvals.length === 0 ? (
+              {loadingJobs ? (
+                <EmptyState
+                  icon={<Bell size={28} strokeWidth={2.2} color={THEME.orange} />}
+                  title="Loading approval queue"
+                  text="Checking live jobs for pending customer approvals."
+                />
+              ) : jobsError ? (
+                <EmptyState
+                  icon={<AlertTriangle size={28} strokeWidth={2.2} color={THEME.red} />}
+                  title="Could not load approvals"
+                  text={`Live approval data did not load. ${jobsError}`}
+                  actionLabel="Open Approvals"
+                  onAction={() => router.push("/shopproof/dashboard/approvals")}
+                />
+              ) : approvals.length === 0 ? (
                 <EmptyState
                   icon={<Bell size={28} strokeWidth={2.2} color={THEME.orange} />}
                   title="No jobs waiting for approval"
                   text="Pending approvals will show here when customer estimates are ready for review and authorization."
-                  actionLabel="View Intake Queue"
+                  actionLabel="Open Approvals"
+                  onAction={() => router.push("/shopproof/dashboard/approvals")}
                 />
               ) : (
                 <>
@@ -303,7 +507,7 @@ export default function ShopProofPage() {
                       <ApprovalCard key={job.id} job={job} />
                     ))}
                   </div>
-                  <PanelFooter />
+                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/approvals")} />
                 </>
               )}
             </Panel>
@@ -311,6 +515,7 @@ export default function ShopProofPage() {
             <Panel
               title="Active Repairs"
               icon={<Wrench size={15} strokeWidth={2.2} />}
+              href="/shopproof/dashboard/repairs"
               headerRight={
                 <div style={{ display: "flex", gap: 6 }}>
                   <MiniHeaderIcon>
@@ -322,13 +527,32 @@ export default function ShopProofPage() {
                 </div>
               }
             >
-              {activeRepairs.length === 0 ? (
+              {loadingJobs ? (
+                <EmptyState
+                  compact
+                  icon={<Wrench size={26} strokeWidth={2.2} color={THEME.blue} />}
+                  title="Loading active repairs"
+                  text="Pulling current repair status from live jobs."
+                  actionLabel="Open Repairs"
+                  onAction={() => router.push("/shopproof/dashboard/repairs")}
+                />
+              ) : jobsError ? (
+                <EmptyState
+                  compact
+                  icon={<AlertTriangle size={26} strokeWidth={2.2} color={THEME.red} />}
+                  title="Could not load repairs"
+                  text={`Live repair data did not load. ${jobsError}`}
+                  actionLabel="Open Repairs"
+                  onAction={() => router.push("/shopproof/dashboard/repairs")}
+                />
+              ) : activeRepairs.length === 0 ? (
                 <EmptyState
                   compact
                   icon={<Wrench size={26} strokeWidth={2.2} color={THEME.blue} />}
                   title="No active repairs right now"
                   text="Vehicles currently in service will appear here so the shop can monitor work in progress."
-                  actionLabel="Open Work Queue"
+                  actionLabel="Open Repairs"
+                  onAction={() => router.push("/shopproof/dashboard/repairs")}
                 />
               ) : (
                 <div style={{ display: "grid", gap: 10 }}>
@@ -347,34 +571,65 @@ export default function ShopProofPage() {
                 ? "1fr"
                 : isTablet
                   ? "1fr"
-                  : "0.92fr 2.08fr",
+                  : "0.92fr 0.92fr 1.16fr",
               gap: 14,
               alignItems: "start",
             }}
           >
             <Panel
-              title="Parts On Order"
+              title="Parts"
               icon={<Package2 size={15} strokeWidth={2.2} />}
+              href="/shopproof/dashboard/parts"
             >
               {parts.length === 0 ? (
                 <EmptyState
-                  icon={<Package2 size={28} strokeWidth={2.2} color={THEME.orange} />}
-                  title="No parts on order"
-                  text="Ordered parts and expected arrivals will appear here once jobs start waiting on inventory."
-                  actionLabel="Track Parts"
+                  icon={<ShoppingCart size={28} strokeWidth={2.2} color={THEME.orange} />}
+                  title="No parts activity yet"
+                  text="Track parts needed, ordered, received, and attached to customer jobs or quick walk-in tickets."
+                  actionLabel="Open Parts Desk"
+                  onAction={() => router.push("/shopproof/dashboard/parts")}
                 />
               ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {parts.map((part) => (
-                    <PartsCard key={part.id} part={part} />
-                  ))}
-                </div>
+                <>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {parts.map((part) => (
+                      <PartsCard key={part.id} part={part} />
+                    ))}
+                  </div>
+                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/parts")} />
+                </>
+              )}
+            </Panel>
+
+            <Panel
+              title="Inventory"
+              icon={<Boxes size={15} strokeWidth={2.2} />}
+              href="/shopproof/dashboard/inventory"
+            >
+              {inventory.length === 0 ? (
+                <EmptyState
+                  icon={<Boxes size={28} strokeWidth={2.2} color={THEME.emerald} />}
+                  title="No inventory tracked yet"
+                  text="Monitor shelf stock like oil, filters, brake cleaner, silicone, and other shop supplies separately from customer parts."
+                  actionLabel="Open Inventory"
+                  onAction={() => router.push("/shopproof/dashboard/inventory")}
+                />
+              ) : (
+                <>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {inventory.map((item) => (
+                      <InventoryRow key={item.id} item={item} />
+                    ))}
+                  </div>
+                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/inventory")} />
+                </>
               )}
             </Panel>
 
             <Panel
               title="Technician Assignments"
               icon={<UserCircle2 size={15} strokeWidth={2.2} />}
+              href="/shopproof/dashboard/team"
               headerRight={
                 <div style={{ display: "flex", gap: 6 }}>
                   <MiniHeaderIcon>
@@ -391,13 +646,14 @@ export default function ShopProofPage() {
                   icon={<UserCircle2 size={28} strokeWidth={2.2} color={THEME.emerald} />}
                   title="No technician assignments yet"
                   text="As jobs are assigned to your team, technician workload and repair visibility will populate here."
-                  actionLabel="Assign Technician"
+                  actionLabel="Open Team Board"
+                  onAction={() => router.push("/shopproof/dashboard/team")}
                 />
               ) : (
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: isMobile ? "1fr" : "1.08fr 1.58fr",
+                    gridTemplateColumns: isMobile ? "1fr" : "1.02fr 1.28fr",
                     gap: 12,
                   }}
                 >
@@ -441,16 +697,16 @@ export default function ShopProofPage() {
             <Panel
               title="Alerts & Issues"
               icon={<AlertTriangle size={15} strokeWidth={2.2} />}
+              href="/shopproof/dashboard/alerts"
             >
               {alerts.length === 0 ? (
                 <EmptyState
                   compact
-                  icon={
-                    <AlertTriangle size={26} strokeWidth={2.2} color={THEME.red} />
-                  }
+                  icon={<AlertTriangle size={26} strokeWidth={2.2} color={THEME.red} />}
                   title="No alerts or issues"
                   text="Warnings, urgent concerns, and high-priority items will surface here when they need attention."
-                  actionLabel="View History"
+                  actionLabel="Open Alerts"
+                  onAction={() => router.push("/shopproof/dashboard/alerts")}
                 />
               ) : (
                 <div style={{ display: "grid", gap: 0 }}>
@@ -476,11 +732,13 @@ function TopBar({
   vehicleCount,
   partsCount,
   pickupCount,
+  onCreateJob,
 }: {
   isMobile: boolean;
   vehicleCount: number;
   partsCount: number;
   pickupCount: number;
+  onCreateJob: () => void;
 }) {
   return (
     <div
@@ -564,7 +822,7 @@ function TopBar({
         }}
       >
         <TopMetric value={String(vehicleCount)} label="Vehicles in Shop" />
-        <TopMetric value={String(partsCount)} label="Waiting for Parts" />
+        <TopMetric value={String(partsCount)} label="Part Orders" />
         <TopMetric value={String(pickupCount)} label="Ready for Pickup" />
       </div>
 
@@ -579,9 +837,9 @@ function TopBar({
           zIndex: 1,
         }}
       >
-        <button type="button" style={primaryActionButton}>
+        <button type="button" style={primaryActionButton} onClick={onCreateJob}>
           <Plus size={13} strokeWidth={2.7} />
-          Customer
+          Job
         </button>
 
         <SquareActionButton>
@@ -670,14 +928,19 @@ function Panel({
   icon,
   children,
   headerRight,
+  href,
 }: {
   title: string;
   icon?: ReactNode;
   children: ReactNode;
   headerRight?: ReactNode;
+  href?: string;
 }) {
+  const router = useRouter();
+
   return (
     <section
+      onClick={() => href && router.push(href)}
       style={{
         borderRadius: 18,
         overflow: "hidden",
@@ -685,6 +948,18 @@ function Panel({
         border: THEME.border,
         boxShadow: THEME.panelShadow,
         position: "relative",
+        cursor: href ? "pointer" : "default",
+        transition: "transform 160ms ease, box-shadow 160ms ease",
+      }}
+      onMouseEnter={(e) => {
+        if (!href) return;
+        e.currentTarget.style.transform = "translateY(-1px)";
+        e.currentTarget.style.boxShadow = "0 22px 48px rgba(0,0,0,0.28)";
+      }}
+      onMouseLeave={(e) => {
+        if (!href) return;
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = THEME.panelShadow;
       }}
     >
       <div
@@ -756,7 +1031,14 @@ function Panel({
           </h2>
         </div>
 
-        {headerRight}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {headerRight}
+          {href ? (
+            <MiniHeaderIcon>
+              <ChevronRight size={12} strokeWidth={2.6} />
+            </MiniHeaderIcon>
+          ) : null}
+        </div>
       </div>
 
       <div style={{ padding: 12, position: "relative", zIndex: 1 }}>{children}</div>
@@ -770,13 +1052,20 @@ function EmptyState({
   text,
   actionLabel,
   compact = false,
+  onAction,
 }: {
   icon?: ReactNode;
   title: string;
   text: string;
   actionLabel?: string;
   compact?: boolean;
+  onAction?: () => void;
 }) {
+  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    onAction?.();
+  };
+
   return (
     <div
       style={{
@@ -865,6 +1154,7 @@ function EmptyState({
         {actionLabel ? (
           <button
             type="button"
+            onClick={handleClick}
             style={{
               height: 38,
               padding: "0 14px",
@@ -1177,6 +1467,92 @@ function PartsCard({ part }: { part: PartCardData }) {
         >
           Due: {part.due}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function InventoryRow({ item }: { item: InventoryItemData }) {
+  const tone = getAccent(item.accent);
+
+  return (
+    <div
+      style={{
+        minHeight: 86,
+        display: "grid",
+        gridTemplateColumns: "1fr auto",
+        gap: 10,
+        padding: 10,
+        borderRadius: 14,
+        background: THEME.card,
+        border: THEME.borderSoft,
+        position: "relative",
+        overflow: "hidden",
+        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
+      }}
+    >
+      <CardTexture />
+      <AccentLine color={tone.line} />
+
+      <div
+        style={{
+          minWidth: 0,
+          paddingLeft: 8,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          gap: 6,
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 900,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {item.name}
+        </div>
+
+        <div
+          style={{
+            fontSize: 12,
+            color: THEME.textMuted,
+            fontWeight: 800,
+          }}
+        >
+          In Stock: {item.stock}
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: 28,
+            padding: "0 10px",
+            borderRadius: 8,
+            background: tone.soft,
+            color: tone.color,
+            border: `1px solid ${tone.border}`,
+            fontSize: 12,
+            fontWeight: 900,
+            whiteSpace: "nowrap",
+            boxShadow: `0 0 14px ${tone.glow}`,
+          }}
+        >
+          Reorder at {item.threshold}
+        </span>
       </div>
     </div>
   );
@@ -1505,7 +1881,12 @@ function SmallImageThumb({ img }: { img: string }) {
   );
 }
 
-function PanelFooter() {
+function PanelFooter({ onClick }: { onClick?: () => void }) {
+  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    onClick?.();
+  };
+
   return (
     <div
       style={{
@@ -1516,6 +1897,7 @@ function PanelFooter() {
     >
       <button
         type="button"
+        onClick={handleClick}
         style={{
           height: 34,
           minWidth: 118,
@@ -1661,6 +2043,7 @@ function SquareActionButton({ children }: { children: ReactNode }) {
   return (
     <button
       type="button"
+      onClick={(e) => e.stopPropagation()}
       style={{
         width: 40,
         height: 40,
@@ -1711,6 +2094,7 @@ function AvatarAction() {
   return (
     <button
       type="button"
+      onClick={(e) => e.stopPropagation()}
       style={{
         height: 40,
         padding: "0 9px 0 7px",
@@ -1799,6 +2183,59 @@ function getApprovalTone(status: ApprovalStatus) {
     border: "rgba(245,158,66,0.34)",
     glow: "rgba(245,158,66,0.18)",
   };
+}
+
+function normalizeVehicleStatus(status: string | null): VehicleStatus | null {
+  if (status === "In Progress") return "In Progress";
+  if (status === "Waiting on Parts") return "Waiting on Parts";
+  if (status === "Ready for Pickup") return "Ready for Pickup";
+  if (status === "Diagnostics") return "Diagnostics";
+  return null;
+}
+
+function normalizeApprovalStatus(status: string | null): ApprovalStatus | null {
+  if (status === "Pending Approval") return "Pending Approval";
+  if (status === "Approved") return "Approved";
+  if (status === "Repairing") return "Repairing";
+  return null;
+}
+
+function formatVehicleLabel(vehicle: VehicleRow) {
+  return [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() || "Unknown Vehicle";
+}
+
+function formatDueText(createdAt: string | null) {
+  if (!createdAt) return "Recently created";
+
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return "Recently created";
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getVehicleAccent(status: VehicleStatus): Accent {
+  if (status === "Waiting on Parts") return "orange";
+  if (status === "Ready for Pickup") return "emerald";
+  return "blue";
+}
+
+function getVehicleImage(status: VehicleStatus) {
+  if (status === "Waiting on Parts") return "/images/fleetproof-inspection.png";
+  if (status === "Ready for Pickup") return "/images/equipment-proof.jpg";
+  return "/images/driveproof-damage.jpg";
+}
+
+function getApprovalImage() {
+  return "/images/driveproof-damage.jpg";
+}
+
+function getRepairImage(status: VehicleStatus) {
+  if (status === "Waiting on Parts") return "/images/equipment-proof.jpg";
+  if (status === "Diagnostics") return "/images/fleetproof-inspection.png";
+  return "/images/driveproof-damage.jpg";
 }
 
 const primaryActionButton: CSSProperties = {
