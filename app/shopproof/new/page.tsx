@@ -77,6 +77,12 @@ type CustomerRow = { id: string };
 type TeamMemberRow = { id: string | null };
 type VehicleDecode = { year: string; make: string; model: string };
 
+type PendingVinCandidate = {
+  vin: string;
+  source: "scan";
+  imageName?: string;
+};
+
 const TEAM_MEMBERS: TeamMember[] = [
   { id: "1", name: "Thomas", role: "Service Advisor" },
   { id: "2", name: "Mike", role: "Lead Technician" },
@@ -160,13 +166,16 @@ export default function ShopProofNewPage() {
   const [width, setWidth] = useState(1440);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [scanMessage, setScanMessage] = useState(
-    "Use Scan VIN on your phone to capture a VIN plate photo, OCR the VIN, and auto-fill vehicle fields.",
+    "Use Scan VIN on your phone to capture a VIN plate photo, detect the VIN, confirm it, and then decode vehicle details.",
   );
   const [isCreating, setIsCreating] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
+  const [pendingVin, setPendingVin] = useState<PendingVinCandidate | null>(null);
+  const [pendingVinInput, setPendingVinInput] = useState("");
+  const [isDecodingVin, setIsDecodingVin] = useState(false);
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
@@ -177,7 +186,9 @@ export default function ShopProofNewPage() {
 
   useEffect(() => {
     return () => {
-      if (scanPreviewUrl) URL.revokeObjectURL(scanPreviewUrl);
+      if (scanPreviewUrl) {
+        URL.revokeObjectURL(scanPreviewUrl);
+      }
     };
   }, [scanPreviewUrl]);
 
@@ -205,6 +216,18 @@ export default function ShopProofNewPage() {
     () => evaluateConcern(form.concern),
     [form.concern],
   );
+
+  const pendingVinValidation = useMemo(() => {
+    if (!pendingVin) return null;
+    const normalized = normalizeVin(pendingVinInput);
+    if (!normalized) {
+      return "VIN is empty.";
+    }
+    if (!isValidVin(normalized)) {
+      return "VIN must be 17 valid characters.";
+    }
+    return null;
+  }, [pendingVin, pendingVinInput]);
 
   const readinessItems = useMemo<ReadinessItem[]>(
     () => [
@@ -291,17 +314,22 @@ export default function ShopProofNewPage() {
     updateField("phone", formatPhone(value));
   };
 
-  const handleVinChange = (value: string) => {
-    updateField("vin", normalizeVin(value));
-  };
-
   const handleMileageChange = (value: string) => {
     updateField("mileageIn", formatMileage(value));
   };
 
   const handleVinScan = () => {
-    if (isScanning) return;
+    if (isScanning || isDecodingVin) return;
+    setSubmitError(null);
     fileInputRef.current?.click();
+  };
+
+  const handleDirectVinChange = (value: string) => {
+    const normalized = normalizeVin(value);
+    setPendingVin(null);
+    setPendingVinInput("");
+    setIsDecodingVin(false);
+    updateField("vin", normalized);
   };
 
   const handleScanFileChange = async (
@@ -312,49 +340,38 @@ export default function ShopProofNewPage() {
 
     if (!file) return;
 
-    if (scanPreviewUrl) URL.revokeObjectURL(scanPreviewUrl);
+    if (scanPreviewUrl) {
+      URL.revokeObjectURL(scanPreviewUrl);
+    }
+
     const nextPreview = URL.createObjectURL(file);
     setScanPreviewUrl(nextPreview);
 
     setSubmitError(null);
     setIsScanning(true);
+    setIsDecodingVin(false);
     setOcrProgress(0);
+    setPendingVin(null);
+    setPendingVinInput("");
     setScanMessage("Reading VIN plate photo...");
 
     try {
       const recognizedVin = await scanVinFromImage(file, setOcrProgress);
 
-      setForm((prev) => ({
-        ...prev,
+      setPendingVin({
         vin: recognizedVin,
-      }));
-
-      setScanMessage(`VIN captured: ${recognizedVin}. Decoding vehicle...`);
-
-      const decoded = await decodeVinWithNhtsa(
-        recognizedVin,
-        form.year.trim() || undefined,
-      );
-
-      setForm((prev) => ({
-        ...prev,
-        vin: recognizedVin,
-        year: decoded.year || prev.year,
-        make: decoded.make || prev.make,
-        model: decoded.model || prev.model,
-      }));
-
-      const identity = [decoded.year, decoded.make, decoded.model]
-        .filter(Boolean)
-        .join(" ");
+        source: "scan",
+        imageName: file.name,
+      });
+      setPendingVinInput(recognizedVin);
 
       setScanMessage(
-        identity
-          ? `VIN captured and decoded. ${recognizedVin} → ${identity}`
-          : `VIN captured: ${recognizedVin}. Fill any missing vehicle details if needed.`,
+        "VIN detected from the photo. Confirm, edit, or rescan before vehicle details are decoded.",
       );
     } catch (error) {
       console.error("VIN scan failed:", error);
+      setPendingVin(null);
+      setPendingVinInput("");
       setScanMessage(
         error instanceof Error
           ? error.message
@@ -366,8 +383,92 @@ export default function ShopProofNewPage() {
     }
   };
 
+  const handleConfirmPendingVin = async () => {
+    if (!pendingVin) return;
+
+    const confirmedVin = normalizeVin(pendingVinInput);
+
+    if (!isValidVin(confirmedVin)) {
+      setScanMessage("VIN must be 17 valid characters before it can be confirmed.");
+      return;
+    }
+
+    setIsDecodingVin(true);
+    setSubmitError(null);
+
+    setForm((prev) => ({
+      ...prev,
+      vin: confirmedVin,
+    }));
+
+    setScanMessage(`VIN confirmed: ${confirmedVin}. Decoding vehicle details...`);
+
+    try {
+      const decoded = await decodeVinWithNhtsa(
+        confirmedVin,
+        form.year.trim() || undefined,
+      );
+
+      setForm((prev) => ({
+        ...prev,
+        vin: confirmedVin,
+        year: decoded.year || prev.year,
+        make: decoded.make || prev.make,
+        model: decoded.model || prev.model,
+      }));
+
+      const identity = [decoded.year, decoded.make, decoded.model]
+        .filter(Boolean)
+        .join(" ");
+
+      setScanMessage(
+        identity
+          ? `VIN confirmed and decoded. ${confirmedVin} → ${identity}`
+          : `VIN confirmed: ${confirmedVin}. Fill any missing vehicle details if needed.`,
+      );
+
+      setPendingVin(null);
+      setPendingVinInput("");
+    } catch (error) {
+      console.error("VIN decode failed:", error);
+
+      setForm((prev) => ({
+        ...prev,
+        vin: confirmedVin,
+      }));
+
+      setScanMessage(
+        error instanceof Error
+          ? `VIN confirmed. ${error.message}`
+          : "VIN confirmed. Decode service was unavailable, so complete vehicle details manually if needed.",
+      );
+
+      setPendingVin(null);
+      setPendingVinInput("");
+    } finally {
+      setIsDecodingVin(false);
+    }
+  };
+
+  const handleRescanVin = () => {
+    setPendingVin(null);
+    setPendingVinInput("");
+    setScanMessage("Rescan the VIN plate photo when ready.");
+    fileInputRef.current?.click();
+  };
+
+  const handleDismissPendingVin = () => {
+    setPendingVin(null);
+    setPendingVinInput("");
+    setScanMessage("VIN detection cleared. You can rescan or enter the VIN manually.");
+  };
+
   const handlePrefillDemo = async () => {
     const demoVin = "1FTFW1ET5JKD23466";
+
+    setPendingVin(null);
+    setPendingVinInput("");
+    setIsDecodingVin(true);
 
     setForm((prev) => ({
       ...prev,
@@ -412,6 +513,8 @@ export default function ShopProofNewPage() {
       setScanMessage(
         "Demo vehicle filled. VIN decode was unavailable, so fallback values were used.",
       );
+    } finally {
+      setIsDecodingVin(false);
     }
   };
 
@@ -897,7 +1000,7 @@ export default function ShopProofNewPage() {
                     <InputBlock
                       label="VIN"
                       value={form.vin}
-                      onChange={handleVinChange}
+                      onChange={handleDirectVinChange}
                       placeholder="17-character VIN"
                       validation={vinState.hint}
                     />
@@ -907,9 +1010,12 @@ export default function ShopProofNewPage() {
                       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                         <button
                           type="button"
-                          style={{ ...primaryButton, opacity: isScanning ? 0.85 : 1 }}
+                          style={{
+                            ...primaryButton,
+                            opacity: isScanning || isDecodingVin ? 0.85 : 1,
+                          }}
                           onClick={handleVinScan}
-                          disabled={isScanning}
+                          disabled={isScanning || isDecodingVin}
                         >
                           {isScanning ? (
                             <LoaderCircle size={15} className="spin" />
@@ -922,6 +1028,7 @@ export default function ShopProofNewPage() {
                           type="button"
                           style={ghostButton}
                           onClick={handlePrefillDemo}
+                          disabled={isScanning || isDecodingVin}
                         >
                           <Camera size={15} />
                           Demo Fill
@@ -944,6 +1051,124 @@ export default function ShopProofNewPage() {
                   >
                     {scanMessage}
                   </div>
+
+                  {pendingVin && (
+                    <div
+                      style={{
+                        marginTop: "10px",
+                        borderRadius: "16px",
+                        border: `1px solid ${THEME.blueLine}`,
+                        background: "rgba(8,18,31,0.88)",
+                        padding: "12px",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "0.92rem",
+                              fontWeight: 800,
+                              color: THEME.text,
+                            }}
+                          >
+                            Confirm detected VIN
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.8rem",
+                              color: THEME.textMuted,
+                              marginTop: "2px",
+                            }}
+                          >
+                            Review before this VIN is accepted and decoded.
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            borderRadius: 999,
+                            padding: "7px 10px",
+                            fontSize: "0.76rem",
+                            fontWeight: 800,
+                            color: THEME.blue,
+                            background: THEME.blueSoft,
+                            border: `1px solid ${THEME.blueLine}`,
+                          }}
+                        >
+                          Confirmation Required
+                        </div>
+                      </div>
+
+                      <InputBlock
+                        label="Detected VIN"
+                        value={pendingVinInput}
+                        onChange={(value) => setPendingVinInput(normalizeVin(value))}
+                        placeholder="Confirm or edit the VIN"
+                        validation={pendingVinValidation ?? undefined}
+                      />
+
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          display: "flex",
+                          gap: "10px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          style={{
+                            ...primaryButton,
+                            opacity:
+                              pendingVinValidation || isDecodingVin ? 0.82 : 1,
+                            cursor:
+                              pendingVinValidation || isDecodingVin
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
+                          onClick={handleConfirmPendingVin}
+                          disabled={Boolean(pendingVinValidation) || isDecodingVin}
+                        >
+                          {isDecodingVin ? (
+                            <LoaderCircle size={15} className="spin" />
+                          ) : (
+                            <CheckCircle2 size={15} />
+                          )}
+                          {isDecodingVin ? "Confirming..." : "Confirm VIN"}
+                        </button>
+
+                        <button
+                          type="button"
+                          style={ghostButton}
+                          onClick={handleRescanVin}
+                          disabled={isScanning || isDecodingVin}
+                        >
+                          <ScanLine size={15} />
+                          Rescan
+                        </button>
+
+                        <button
+                          type="button"
+                          style={ghostButton}
+                          onClick={handleDismissPendingVin}
+                          disabled={isScanning || isDecodingVin}
+                        >
+                          <ArrowLeft size={15} />
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {(isScanning || scanPreviewUrl) && (
                     <div style={{ marginTop: "10px", display: "grid", gap: "10px" }}>
@@ -1362,7 +1587,7 @@ export default function ShopProofNewPage() {
                         marginTop: "3px",
                       }}
                     >
-                      Same layout. Scan added cleanly.
+                      Professional VIN confirmation flow is now built into intake.
                     </div>
                   </div>
 
@@ -1840,7 +2065,7 @@ function evaluateVin(value: string): FieldState {
     return {
       tone: "yellow",
       status: "Review",
-      hint: "Enter or scan the 17-character VIN.",
+      hint: "Enter or confirm the 17-character VIN.",
     };
   }
 
