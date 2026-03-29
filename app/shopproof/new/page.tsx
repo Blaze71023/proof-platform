@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode, ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AlertCircle,
   ArrowLeft,
-  Camera,
   CarFront,
   CheckCircle2,
   ChevronDown,
@@ -15,7 +14,7 @@ import {
   LoaderCircle,
   Plus,
   Save,
-  ScanLine,
+  Search,
   Shield,
   UserCircle2,
   Wrench,
@@ -76,27 +75,6 @@ type ShopRow = { id: string };
 type CustomerRow = { id: string };
 type TeamMemberRow = { id: string | null };
 type VehicleDecode = { year: string; make: string; model: string };
-
-type PendingVinCandidate = {
-  vin: string;
-  source: "scan";
-  imageName?: string;
-  confidenceLabel: string;
-};
-
-type OcrPassResult = {
-  text: string;
-};
-
-type VinCandidate = {
-  vin: string;
-  substitutions: number;
-  lineIndex: number;
-  rawLine: string;
-  compactSource: string;
-  score: number;
-  checksumValid: boolean;
-};
 
 const TEAM_MEMBERS: TeamMember[] = [
   { id: "1", name: "Thomas", role: "Service Advisor" },
@@ -163,33 +141,6 @@ const INITIAL_FORM: FormState = {
   technician: "Unassigned",
 };
 
-const VIN_ALLOWED_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
-const VIN_LINE_CLEAN_REGEX = /[^A-Z0-9]/g;
-const VIN_SUBSTITUTION_MAP: Record<string, string> = {
-  O: "0",
-  Q: "0",
-  I: "1",
-};
-const VIN_STOP_WORDS = [
-  "VEHICLE",
-  "THEFT",
-  "WARNING",
-  "MFD",
-  "DATE",
-  "GVWR",
-  "GAWR",
-  "TYPE",
-  "PASSENGER",
-  "CONFORMS",
-  "SAFETY",
-  "STANDARDS",
-  "THIS",
-  "AUTO",
-  "MADE",
-  "IN",
-  "BY",
-];
-
 function getBrowserSupabaseClient(): SupabaseClient | null {
   if (typeof window === "undefined") return null;
 
@@ -203,21 +154,16 @@ function getBrowserSupabaseClient(): SupabaseClient | null {
 
 export default function ShopProofNewPage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [width, setWidth] = useState(1440);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [scanMessage, setScanMessage] = useState(
-    "Use Scan VIN on your phone to capture a VIN plate photo, detect a VIN candidate, confirm it, and then decode vehicle details.",
+    "Enter the VIN manually, then use Decode VIN to pull vehicle details through ShopPROOF.",
   );
   const [isCreating, setIsCreating] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState(0);
-  const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
-  const [pendingVin, setPendingVin] = useState<PendingVinCandidate | null>(null);
-  const [pendingVinInput, setPendingVinInput] = useState("");
   const [isDecodingVin, setIsDecodingVin] = useState(false);
+  const [lastDecodedVin, setLastDecodedVin] = useState<string>("");
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
@@ -225,14 +171,6 @@ export default function ShopProofNewPage() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-
-  useEffect(() => {
-    return () => {
-      if (scanPreviewUrl) {
-        URL.revokeObjectURL(scanPreviewUrl);
-      }
-    };
-  }, [scanPreviewUrl]);
 
   const isMobile = width < 820;
 
@@ -259,13 +197,7 @@ export default function ShopProofNewPage() {
     [form.concern],
   );
 
-  const pendingVinValidation = useMemo(() => {
-    if (!pendingVin) return null;
-    const normalized = normalizeVinStrict(pendingVinInput);
-    if (!normalized) return "VIN is empty.";
-    if (!isValidVin(normalized)) return "VIN must be 17 valid characters.";
-    return null;
-  }, [pendingVin, pendingVinInput]);
+  const canDecodeVin = useMemo(() => isValidVin(form.vin), [form.vin]);
 
   const readinessItems = useMemo<ReadinessItem[]>(
     () => [
@@ -313,20 +245,20 @@ export default function ShopProofNewPage() {
       },
     ],
     [
-      customerNameState.tone,
-      customerNameState.status,
-      addressState.tone,
       addressState.status,
-      phoneState.tone,
-      phoneState.status,
-      vinState.tone,
-      vinState.status,
-      vehicleIdentityState.tone,
-      vehicleIdentityState.status,
-      mileageState.tone,
-      mileageState.status,
-      concernState.tone,
+      addressState.tone,
       concernState.status,
+      concernState.tone,
+      customerNameState.status,
+      customerNameState.tone,
+      mileageState.status,
+      mileageState.tone,
+      phoneState.status,
+      phoneState.tone,
+      vehicleIdentityState.status,
+      vehicleIdentityState.tone,
+      vinState.status,
+      vinState.tone,
     ],
   );
 
@@ -352,111 +284,56 @@ export default function ShopProofNewPage() {
     updateField("phone", formatPhone(value));
   };
 
+  const handleVinChange = (value: string) => {
+    const normalized = normalizeVinStrict(value);
+    updateField("vin", normalized);
+
+    if (!normalized) {
+      setLastDecodedVin("");
+      setScanMessage(
+        "Enter the VIN manually, then use Decode VIN to pull vehicle details through ShopPROOF.",
+      );
+      return;
+    }
+
+    if (normalized !== lastDecodedVin) {
+      setScanMessage(
+        "VIN entered. Use Decode VIN to pull year, make, and model.",
+      );
+    }
+  };
+
   const handleMileageChange = (value: string) => {
     updateField("mileageIn", formatMileage(value));
   };
 
-  const clearPendingVinState = () => {
-    setPendingVin(null);
-    setPendingVinInput("");
-  };
+  const handleDecodeVin = async () => {
+    const cleanVin = normalizeVinStrict(form.vin);
 
-  const handleVinScan = () => {
-    if (isScanning || isDecodingVin) return;
-    setSubmitError(null);
-    fileInputRef.current?.click();
-  };
-
-  const handleDirectVinChange = (value: string) => {
-    const normalized = normalizeVinStrict(value);
-    clearPendingVinState();
-    setIsDecodingVin(false);
-    updateField("vin", normalized);
-  };
-
-  const handleScanFileChange = async (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) return;
-
-    if (scanPreviewUrl) {
-      URL.revokeObjectURL(scanPreviewUrl);
-    }
-
-    const nextPreview = URL.createObjectURL(file);
-    setScanPreviewUrl(nextPreview);
-
-    setSubmitError(null);
-    setIsScanning(true);
-    setIsDecodingVin(false);
-    setOcrProgress(0);
-    clearPendingVinState();
-    setScanMessage("Reading VIN plate photo...");
-
-    try {
-      const detected = await scanVinFromImage(file, setOcrProgress);
-
-      setPendingVin({
-        vin: detected.vin,
-        source: "scan",
-        imageName: file.name,
-        confidenceLabel: buildVinConfidenceLabel(detected),
-      });
-      setPendingVinInput(detected.vin);
-
-      setScanMessage(
-        "VIN candidate detected. Review and confirm before it is accepted.",
-      );
-    } catch (error) {
-      console.error("VIN scan failed:", error);
-      clearPendingVinState();
-      setScanMessage(
-        error instanceof Error
-          ? error.message
-          : "VIN scan failed. Try a closer, sharper photo of the VIN plate.",
-      );
-    } finally {
-      setIsScanning(false);
-      setOcrProgress(0);
-    }
-  };
-
-  const handleConfirmPendingVin = async () => {
-    if (!pendingVin) return;
-
-    const confirmedVin = normalizeVinStrict(pendingVinInput);
-
-    if (!isValidVin(confirmedVin)) {
-      setScanMessage("VIN must be 17 valid characters before it can be confirmed.");
+    if (!isValidVin(cleanVin)) {
+      setScanMessage("Enter a valid 17-character VIN before decoding.");
       return;
     }
 
     setIsDecodingVin(true);
     setSubmitError(null);
-
-    setForm((prev) => ({
-      ...prev,
-      vin: confirmedVin,
-    }));
-
-    setScanMessage(`VIN confirmed: ${confirmedVin}. Decoding vehicle details...`);
+    setScanMessage(`Decoding VIN ${cleanVin}...`);
 
     try {
       const decoded = await decodeVinViaAppRoute(
-        confirmedVin,
+        cleanVin,
         form.year.trim() || undefined,
       );
 
       setForm((prev) => ({
         ...prev,
-        vin: confirmedVin,
+        vin: cleanVin,
         year: decoded.year || prev.year,
         make: decoded.make || prev.make,
         model: decoded.model || prev.model,
       }));
+
+      setLastDecodedVin(cleanVin);
 
       const identity = [decoded.year, decoded.make, decoded.model]
         .filter(Boolean)
@@ -464,44 +341,24 @@ export default function ShopProofNewPage() {
 
       setScanMessage(
         identity
-          ? `VIN confirmed and decoded. ${confirmedVin} → ${identity}`
-          : `VIN confirmed: ${confirmedVin}. Decode unavailable right now. Fill any missing vehicle details if needed.`,
+          ? `VIN decoded successfully. ${cleanVin} → ${identity}`
+          : `VIN confirmed. Decode returned limited data, so fill any missing vehicle details manually.`,
       );
-
-      clearPendingVinState();
     } catch (error) {
       console.error("VIN decode failed:", error);
-
-      setForm((prev) => ({
-        ...prev,
-        vin: confirmedVin,
-      }));
+      setLastDecodedVin("");
 
       setScanMessage(
-        "VIN confirmed. Decode unavailable right now. Enter year/make/model manually if needed.",
+        "VIN is valid, but decode is unavailable right now. Enter year, make, and model manually if needed.",
       );
-
-      clearPendingVinState();
     } finally {
       setIsDecodingVin(false);
     }
   };
 
-  const handleRescanVin = () => {
-    clearPendingVinState();
-    setScanMessage("Rescan the VIN plate photo when ready.");
-    fileInputRef.current?.click();
-  };
-
-  const handleDismissPendingVin = () => {
-    clearPendingVinState();
-    setScanMessage("VIN detection cleared. You can rescan or enter the VIN manually.");
-  };
-
   const handlePrefillDemo = async () => {
     const demoVin = "1FTFW1ET5JKD23466";
 
-    clearPendingVinState();
     setIsDecodingVin(true);
 
     setForm((prev) => ({
@@ -528,8 +385,9 @@ export default function ShopProofNewPage() {
         make: decoded.make || prev.make,
         model: decoded.model || prev.model,
       }));
+      setLastDecodedVin(demoVin);
       setScanMessage(
-        `Demo VIN decoded through app route: ${[
+        `Demo VIN decoded through ShopPROOF: ${[
           decoded.year,
           decoded.make,
           decoded.model,
@@ -544,6 +402,7 @@ export default function ShopProofNewPage() {
         make: prev.make || "Ford",
         model: prev.model || "F-150",
       }));
+      setLastDecodedVin("");
       setScanMessage(
         "Demo vehicle filled. Decode was unavailable, so fallback values were used.",
       );
@@ -764,15 +623,6 @@ export default function ShopProofNewPage() {
         padding: isMobile ? "8px" : "18px",
       }}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleScanFileChange}
-        style={{ display: "none" }}
-      />
-
       <div
         style={{
           maxWidth: "1360px",
@@ -1020,7 +870,7 @@ export default function ShopProofNewPage() {
                 <SectionCard
                   icon={<CarFront size={17} />}
                   title="Vehicle Info"
-                  subtitle="Vehicle identity and front desk intake details"
+                  subtitle="Manual VIN entry with reliable ShopPROOF decode"
                   accent="emerald"
                 >
                   <div
@@ -1034,7 +884,7 @@ export default function ShopProofNewPage() {
                     <InputBlock
                       label="VIN"
                       value={form.vin}
-                      onChange={handleDirectVinChange}
+                      onChange={handleVinChange}
                       placeholder="17-character VIN"
                       validation={vinState.hint}
                     />
@@ -1046,25 +896,30 @@ export default function ShopProofNewPage() {
                           type="button"
                           style={{
                             ...primaryButton,
-                            opacity: isScanning || isDecodingVin ? 0.85 : 1,
+                            opacity: canDecodeVin && !isDecodingVin ? 1 : 0.82,
+                            cursor:
+                              canDecodeVin && !isDecodingVin
+                                ? "pointer"
+                                : "not-allowed",
                           }}
-                          onClick={handleVinScan}
-                          disabled={isScanning || isDecodingVin}
+                          onClick={handleDecodeVin}
+                          disabled={!canDecodeVin || isDecodingVin}
                         >
-                          {isScanning ? (
+                          {isDecodingVin ? (
                             <LoaderCircle size={15} className="spin" />
                           ) : (
-                            <ScanLine size={15} />
+                            <Search size={15} />
                           )}
-                          {isScanning ? "Scanning..." : "Scan VIN"}
+                          {isDecodingVin ? "Decoding..." : "Decode VIN"}
                         </button>
+
                         <button
                           type="button"
                           style={ghostButton}
                           onClick={handlePrefillDemo}
-                          disabled={isScanning || isDecodingVin}
+                          disabled={isDecodingVin}
                         >
-                          <Camera size={15} />
+                          <CheckCircle2 size={15} />
                           Demo Fill
                         </button>
                       </div>
@@ -1086,215 +941,39 @@ export default function ShopProofNewPage() {
                     {scanMessage}
                   </div>
 
-                  {pendingVin && (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      borderRadius: "12px",
+                      border: `1px solid ${THEME.lineFaint}`,
+                      background: "rgba(5,12,20,0.42)",
+                      padding: "10px 12px",
+                    }}
+                  >
                     <div
                       style={{
-                        marginTop: "10px",
-                        borderRadius: "16px",
-                        border: `1px solid ${THEME.blueLine}`,
-                        background: "rgba(8,18,31,0.88)",
-                        padding: "12px",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                        fontSize: "0.8rem",
+                        fontWeight: 800,
+                        color: THEME.textSoft,
+                        marginBottom: "4px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: "10px",
-                          alignItems: "center",
-                          flexWrap: "wrap",
-                          marginBottom: "10px",
-                        }}
-                      >
-                        <div>
-                          <div
-                            style={{
-                              fontSize: "0.92rem",
-                              fontWeight: 800,
-                              color: THEME.text,
-                            }}
-                          >
-                            Confirm detected VIN
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.8rem",
-                              color: THEME.textMuted,
-                              marginTop: "2px",
-                            }}
-                          >
-                            Review before this VIN is accepted and decoded.
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <div
-                            style={{
-                              borderRadius: 999,
-                              padding: "7px 10px",
-                              fontSize: "0.76rem",
-                              fontWeight: 800,
-                              color: THEME.blue,
-                              background: THEME.blueSoft,
-                              border: `1px solid ${THEME.blueLine}`,
-                            }}
-                          >
-                            Confirmation Required
-                          </div>
-
-                          <div
-                            style={{
-                              borderRadius: 999,
-                              padding: "7px 10px",
-                              fontSize: "0.76rem",
-                              fontWeight: 800,
-                              color: THEME.textSoft,
-                              background: "rgba(255,255,255,0.05)",
-                              border: `1px solid ${THEME.lineSoft}`,
-                            }}
-                          >
-                            {pendingVin.confidenceLabel}
-                          </div>
-                        </div>
-                      </div>
-
-                      <InputBlock
-                        label="Detected VIN"
-                        value={pendingVinInput}
-                        onChange={(value) =>
-                          setPendingVinInput(normalizeVinStrict(value))
-                        }
-                        placeholder="Confirm or edit the VIN"
-                        validation={pendingVinValidation ?? undefined}
-                      />
-
-                      <div
-                        style={{
-                          marginTop: "10px",
-                          display: "flex",
-                          gap: "10px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          style={{
-                            ...primaryButton,
-                            opacity:
-                              pendingVinValidation || isDecodingVin ? 0.82 : 1,
-                            cursor:
-                              pendingVinValidation || isDecodingVin
-                                ? "not-allowed"
-                                : "pointer",
-                          }}
-                          onClick={handleConfirmPendingVin}
-                          disabled={Boolean(pendingVinValidation) || isDecodingVin}
-                        >
-                          {isDecodingVin ? (
-                            <LoaderCircle size={15} className="spin" />
-                          ) : (
-                            <CheckCircle2 size={15} />
-                          )}
-                          {isDecodingVin ? "Confirming..." : "Confirm VIN"}
-                        </button>
-
-                        <button
-                          type="button"
-                          style={ghostButton}
-                          onClick={handleRescanVin}
-                          disabled={isScanning || isDecodingVin}
-                        >
-                          <ScanLine size={15} />
-                          Rescan
-                        </button>
-
-                        <button
-                          type="button"
-                          style={ghostButton}
-                          onClick={handleDismissPendingVin}
-                          disabled={isScanning || isDecodingVin}
-                        >
-                          <ArrowLeft size={15} />
-                          Clear
-                        </button>
-                      </div>
+                      Workflow
                     </div>
-                  )}
-
-                  {(isScanning || scanPreviewUrl) && (
-                    <div style={{ marginTop: "10px", display: "grid", gap: "10px" }}>
-                      {isScanning && (
-                        <div
-                          style={{
-                            borderRadius: "12px",
-                            border: `1px solid ${THEME.lineFaint}`,
-                            background: "rgba(5,12,20,0.42)",
-                            padding: "10px 12px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: 8,
-                              borderRadius: 999,
-                              overflow: "hidden",
-                              background: "rgba(255,255,255,0.08)",
-                              border: "1px solid rgba(255,255,255,0.05)",
-                              marginBottom: 6,
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: `${Math.max(4, ocrProgress)}%`,
-                                height: "100%",
-                                background:
-                                  "linear-gradient(90deg, rgba(39,217,191,0.95) 0%, rgba(59,130,246,0.95) 100%)",
-                                transition: "width 160ms ease",
-                              }}
-                            />
-                          </div>
-                          <div
-                            style={{
-                              fontSize: "0.78rem",
-                              color: THEME.textMuted,
-                              fontWeight: 700,
-                            }}
-                          >
-                            OCR progress: {ocrProgress}%
-                          </div>
-                        </div>
-                      )}
-
-                      {scanPreviewUrl && (
-                        <div
-                          style={{
-                            borderRadius: "12px",
-                            border: `1px solid ${THEME.lineFaint}`,
-                            background: "rgba(5,12,20,0.42)",
-                            overflow: "hidden",
-                          }}
-                        >
-                          <img
-                            src={scanPreviewUrl}
-                            alt="VIN scan preview"
-                            style={{
-                              display: "block",
-                              width: "100%",
-                              maxHeight: 180,
-                              objectFit: "contain",
-                              background: "#07111B",
-                            }}
-                          />
-                        </div>
-                      )}
+                    <div
+                      style={{
+                        fontSize: "0.82rem",
+                        color: THEME.textMuted,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Enter the VIN manually, then use Decode VIN. If decode is unavailable,
+                      continue intake and enter year, make, and model manually. No scan
+                      dependency. No blocked workflow.
                     </div>
-                  )}
+                  </div>
 
                   <div style={{ ...twoColGrid(isMobile), marginTop: "12px" }}>
                     <InputBlock
@@ -1645,7 +1324,7 @@ export default function ShopProofNewPage() {
                         marginTop: "3px",
                       }}
                     >
-                      Strict VIN extraction and server-side decode are now built into intake.
+                      Manual VIN entry with stable server-side decode.
                     </div>
                   </div>
 
@@ -2123,7 +1802,7 @@ function evaluateVin(value: string): FieldState {
     return {
       tone: "yellow",
       status: "Review",
-      hint: "Enter or confirm the 17-character VIN.",
+      hint: "Enter the 17-character VIN.",
     };
   }
 
@@ -2228,30 +1907,8 @@ function normalizeVinStrict(value: string) {
     .slice(0, 17);
 }
 
-function normalizeVinCandidateWithMeta(value: string) {
-  let substitutions = 0;
-
-  const normalized = value
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .split("")
-    .map((char) => {
-      if (VIN_SUBSTITUTION_MAP[char]) {
-        substitutions += 1;
-        return VIN_SUBSTITUTION_MAP[char];
-      }
-      return char;
-    })
-    .join("");
-
-  return {
-    value: normalized,
-    substitutions,
-  };
-}
-
 function isValidVin(value: string) {
-  return VIN_ALLOWED_REGEX.test(value);
+  return /^[A-HJ-NPR-Z0-9]{17}$/.test(value);
 }
 
 async function decodeVinViaAppRoute(
@@ -2286,362 +1943,6 @@ async function decodeVinViaAppRoute(
     make: String(payload?.make ?? "").trim(),
     model: String(payload?.model ?? "").trim(),
   };
-}
-
-async function scanVinFromImage(
-  file: File,
-  onProgress?: (progress: number) => void,
-): Promise<VinCandidate> {
-  const { createWorker } = await import("tesseract.js");
-
-  const worker = await createWorker("eng", 1, {
-    logger: (message: { progress?: number }) => {
-      if (typeof message.progress === "number") {
-        onProgress?.(Math.round(message.progress * 100));
-      }
-    },
-  });
-
-  try {
-    await worker.setParameters({
-      tessedit_char_whitelist: "ABCDEFGHJKLMNPRSTUVWXYZ0123456789",
-      preserve_interword_spaces: "0",
-      user_defined_dpi: "300",
-    });
-
-    const processedCanvas = await preprocessVinImage(file);
-    const processedPass = await worker.recognize(processedCanvas);
-    const rawImage = await loadImage(file);
-    const rawPass = await worker.recognize(rawImage);
-
-    const processedResult: OcrPassResult = {
-      text: processedPass.data.text || "",
-    };
-    const rawResult: OcrPassResult = {
-      text: rawPass.data.text || "",
-    };
-
-    const bestVin = extractBestVinFromOcrPasses([processedResult, rawResult]);
-
-    if (!bestVin) {
-      throw new Error(
-        "Could not read a reliable VIN from that photo. Try a closer, sharper image with the VIN plate filling most of the frame and as little extra text as possible.",
-      );
-    }
-
-    return bestVin;
-  } finally {
-    await worker.terminate();
-    onProgress?.(100);
-  }
-}
-
-async function preprocessVinImage(file: File): Promise<HTMLCanvasElement> {
-  const image = await loadImage(file);
-
-  const maxWidth = 2200;
-  const scale = image.width > maxWidth ? maxWidth / image.width : 1;
-  const width = Math.max(1, Math.round(image.width * scale));
-  const height = Math.max(1, Math.round(image.height * scale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not prepare image for OCR.");
-
-  ctx.drawImage(image, 0, 0, width, height);
-
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    const contrasted = gray > 135 ? 255 : 0;
-    data[i] = contrasted;
-    data[i + 1] = contrasted;
-    data[i + 2] = contrasted;
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-  return canvas;
-}
-
-function loadImage(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-
-    image.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(image);
-    };
-
-    image.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Image could not be loaded."));
-    };
-
-    image.src = url;
-  });
-}
-
-function extractBestVinFromOcrPasses(passes: OcrPassResult[]): VinCandidate | null {
-  const candidates = new Map<string, VinCandidate>();
-
-  passes.forEach((pass, passIndex) => {
-    const lines = splitOcrLines(pass.text);
-
-    lines.forEach((line, lineIndex) => {
-      const rawLine = line.trim().toUpperCase();
-      if (!rawLine) return;
-
-      const lineCandidates = extractCandidatesFromLine(
-        rawLine,
-        lineIndex + passIndex * 1000,
-      );
-
-      for (const candidate of lineCandidates) {
-        const existing = candidates.get(candidate.vin);
-        if (!existing || candidate.score > existing.score) {
-          candidates.set(candidate.vin, candidate);
-        }
-      }
-    });
-  });
-
-  const ranked = Array.from(candidates.values())
-    .sort((a, b) => b.score - a.score)
-    .filter((candidate) => candidate.score >= 8);
-
-  return ranked[0] ?? null;
-}
-
-function splitOcrLines(text: string) {
-  return text
-    .toUpperCase()
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function extractCandidatesFromLine(rawLine: string, lineIndex: number): VinCandidate[] {
-  const candidates: VinCandidate[] = [];
-
-  if (shouldRejectLineEarly(rawLine)) {
-    return candidates;
-  }
-
-  const compactRaw = rawLine.replace(VIN_LINE_CLEAN_REGEX, "");
-
-  if (compactRaw.length < 11 || compactRaw.length > 28) {
-    return candidates;
-  }
-
-  const candidateWindows = buildCandidateWindowsFromLine(rawLine);
-
-  for (const windowText of candidateWindows) {
-    const normalized = normalizeVinCandidateWithMeta(windowText);
-    const vin = normalized.value;
-
-    if (!isValidVin(vin)) continue;
-    if (normalized.substitutions > 2) continue;
-    if (!looksLikeRealVin(vin)) continue;
-
-    const checksumValid = isVinChecksumValid(vin);
-    const score = scoreVinCandidate({
-      vin,
-      substitutions: normalized.substitutions,
-      rawLine,
-      checksumValid,
-    });
-
-    if (score < 8) continue;
-
-    candidates.push({
-      vin,
-      substitutions: normalized.substitutions,
-      lineIndex,
-      rawLine,
-      compactSource: compactRaw,
-      score,
-      checksumValid,
-    });
-  }
-
-  return dedupeCandidateList(candidates);
-}
-
-function shouldRejectLineEarly(rawLine: string) {
-  const tokenCount = rawLine
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean).length;
-
-  if (tokenCount > 6) return true;
-
-  const lettersOnly = rawLine.replace(/[^A-Z]/g, "");
-  const stopWordHits = VIN_STOP_WORDS.filter((word) => lettersOnly.includes(word)).length;
-
-  if (stopWordHits >= 2) return true;
-
-  const compact = rawLine.replace(VIN_LINE_CLEAN_REGEX, "");
-  if (compact.length > 28) return true;
-
-  return false;
-}
-
-function buildCandidateWindowsFromLine(rawLine: string) {
-  const set = new Set<string>();
-
-  const splitPieces = rawLine
-    .split(/[\s|:/\\\-_,.;]+/)
-    .map((piece) => piece.trim())
-    .filter(Boolean);
-
-  for (const piece of splitPieces) {
-    const compactPiece = piece.replace(VIN_LINE_CLEAN_REGEX, "");
-    if (compactPiece.length === 17) {
-      set.add(compactPiece);
-    }
-  }
-
-  const compactLine = rawLine.replace(VIN_LINE_CLEAN_REGEX, "");
-  if (compactLine.length === 17) {
-    set.add(compactLine);
-  }
-
-  if (compactLine.length > 17 && compactLine.length <= 22) {
-    for (let i = 0; i <= compactLine.length - 17; i += 1) {
-      set.add(compactLine.slice(i, i + 17));
-    }
-  }
-
-  return Array.from(set);
-}
-
-function looksLikeRealVin(vin: string) {
-  const digitCount = (vin.match(/\d/g) || []).length;
-  const alphaCount = (vin.match(/[A-HJ-NPR-Z]/g) || []).length;
-
-  if (digitCount < 5) return false;
-  if (alphaCount < 5) return false;
-  if (/([A-HJ-NPR-Z0-9])\1{3,}/.test(vin)) return false;
-  if (/^[0-9]{17}$/.test(vin)) return false;
-  if (/^[A-HJ-NPR-Z]{17}$/.test(vin)) return false;
-
-  const firstThree = vin.slice(0, 3);
-  if (!/^[A-HJ-NPR-Z0-9]{3}$/.test(firstThree)) return false;
-
-  const lastSix = vin.slice(-6);
-  if (!/\d{3,}/.test(lastSix)) return false;
-
-  return true;
-}
-
-function scoreVinCandidate(input: {
-  vin: string;
-  substitutions: number;
-  rawLine: string;
-  checksumValid: boolean;
-}) {
-  const { vin, substitutions, rawLine, checksumValid } = input;
-  let score = 0;
-
-  if (vin.length === 17) score += 2;
-  if (isValidVin(vin)) score += 2;
-  if (looksLikeRealVin(vin)) score += 2;
-  if (substitutions === 0) score += 2;
-  else if (substitutions === 1) score += 1;
-  if (checksumValid) score += 2;
-
-  const compactLine = rawLine.replace(VIN_LINE_CLEAN_REGEX, "");
-  if (compactLine === vin) score += 2;
-  else if (compactLine.length <= 20) score += 1;
-
-  const spaces = (rawLine.match(/\s/g) || []).length;
-  if (spaces <= 2) score += 1;
-
-  const stopWordHits = VIN_STOP_WORDS.filter((word) => rawLine.includes(word)).length;
-  score -= stopWordHits * 2;
-
-  return score;
-}
-
-function dedupeCandidateList(candidates: VinCandidate[]) {
-  const bestByVin = new Map<string, VinCandidate>();
-
-  for (const candidate of candidates) {
-    const existing = bestByVin.get(candidate.vin);
-    if (!existing || candidate.score > existing.score) {
-      bestByVin.set(candidate.vin, candidate);
-    }
-  }
-
-  return Array.from(bestByVin.values());
-}
-
-function buildVinConfidenceLabel(candidate: VinCandidate) {
-  if (candidate.score >= 11) return "High confidence";
-  if (candidate.score >= 9) return "Medium confidence";
-  return "Review carefully";
-}
-
-function isVinChecksumValid(vin: string) {
-  if (!isValidVin(vin)) return false;
-
-  const transliteration: Record<string, number> = {
-    A: 1,
-    B: 2,
-    C: 3,
-    D: 4,
-    E: 5,
-    F: 6,
-    G: 7,
-    H: 8,
-    J: 1,
-    K: 2,
-    L: 3,
-    M: 4,
-    N: 5,
-    P: 7,
-    R: 9,
-    S: 2,
-    T: 3,
-    U: 4,
-    V: 5,
-    W: 6,
-    X: 7,
-    Y: 8,
-    Z: 9,
-    0: 0,
-    1: 1,
-    2: 2,
-    3: 3,
-    4: 4,
-    5: 5,
-    6: 6,
-    7: 7,
-    8: 8,
-    9: 9,
-  };
-
-  const weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
-
-  let total = 0;
-
-  for (let i = 0; i < vin.length; i += 1) {
-    const char = vin[i];
-    const value = transliteration[char];
-    if (typeof value !== "number") return false;
-    total += value * weights[i];
-  }
-
-  const remainder = total % 11;
-  const expectedCheck = remainder === 10 ? "X" : String(remainder);
-
-  return vin[8] === expectedCheck;
 }
 
 const fieldLabel: CSSProperties = {
