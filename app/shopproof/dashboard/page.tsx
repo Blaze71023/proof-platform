@@ -1,153 +1,94 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
-  AlertTriangle,
-  Bell,
-  Boxes,
+  AlertCircle,
   CarFront,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
-  Package2,
-  Plus,
+  FileLock2,
+  FileText,
+  Headset,
+  LoaderCircle,
+  Search,
   Shield,
-  ShoppingCart,
-  UserCircle2,
-  Wrench,
 } from "lucide-react";
 
-type VehicleStatus =
+type ShopJobStatus =
+  | "New Intake"
+  | "Waiting on Approval"
+  | "Approved"
   | "In Progress"
   | "Waiting on Parts"
   | "Ready for Pickup"
-  | "Diagnostics";
-
-type ApprovalStatus =
-  | "Pending Approval"
-  | "Approved"
-  | "Repairing";
+  | "Completed"
+  | "Declined";
 
 type Accent = "blue" | "orange" | "emerald";
-
-interface VehicleCardData {
-  id: string;
-  year: string;
-  make: string;
-  model: string;
-  vin: string;
-  status: VehicleStatus;
-  accent: Accent;
-  img: string;
-}
-
-interface ApprovalCardData {
-  id: string;
-  vehicle: string;
-  concern: string;
-  estimate: string;
-  status: ApprovalStatus;
-  accent: Accent;
-  img: string;
-}
-
-interface RepairCardData {
-  id: string;
-  title: string;
-  vehicle: string;
-  due: string;
-  accent: "blue" | "orange";
-  img: string;
-}
-
-interface PartCardData {
-  id: string;
-  name: string;
-  vehicle: string;
-  due: string;
-  img: string;
-}
-
-interface InventoryItemData {
-  id: string;
-  name: string;
-  stock: string;
-  threshold: string;
-  accent: Accent;
-}
-
-interface TechCardData {
-  id: string;
-  name: string;
-  role: string;
-  vehicle: string;
-  avatar: string;
-}
-
-interface AlertItem {
-  id: string;
-  text: string;
-  tone: "warning" | "danger";
-}
+type StatusTone = "red" | "yellow" | "green" | "blue";
 
 type VehicleRow = {
-  id: string;
-  shop_id: string | null;
-  customer_id: string | null;
-  year: string | null;
-  make: string | null;
-  model: string | null;
-  vin: string | null;
-  plate: string | null;
-  created_at: string | null;
+  id?: string | null;
+  year?: string | number | null;
+  make?: string | null;
+  model?: string | null;
+  vin?: string | null;
+  plate?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  created_at?: string | null;
 };
 
 type JobRow = {
   id: string;
-  shop_id: string | null;
-  customer_id: string | null;
-  vehicle_id: string | null;
-  status: string | null;
-  approval_status: string | null;
-  assigned_to: string | null;
-  notes: string | null;
-  created_at: string | null;
-  vehicle: VehicleRow | VehicleRow[] | null;
+  shop_id?: string | null;
+  customer_id?: string | null;
+  vehicle_id?: string | null;
+  status?: string | null;
+  approval_status?: string | null;
+  approval_state?: string | null;
+  assigned_to?: string | null;
+  concern?: string | null;
+  notes?: string | null;
+  findings?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  vehicle?: VehicleRow | VehicleRow[] | null;
+  vehicles?: VehicleRow | VehicleRow[] | null;
+};
+
+type DashboardJobCard = {
+  id: string;
+  status: ShopJobStatus;
+  vehicleLabel: string;
+  vin: string;
+  concern: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  assignedTo: string;
 };
 
 const THEME = {
   pageBase:
-    "linear-gradient(180deg, #02060B 0%, #030912 16%, #03101B 42%, #020912 72%, #02060B 100%)",
+    "linear-gradient(180deg, #02060B 0%, #030912 18%, #03101B 46%, #020912 76%, #02060B 100%)",
   shell:
     "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(5,12,20,0.995) 42%, rgba(3,9,15,1) 100%)",
-  shellInner:
-    "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 16%, rgba(255,255,255,0) 36%)",
   panel:
     "linear-gradient(180deg, rgba(13,24,37,0.98) 0%, rgba(8,16,27,0.99) 48%, rgba(7,13,22,1) 100%)",
-  panelTop:
-    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.012) 24%, rgba(255,255,255,0) 56%)",
-  panelEdgeGlow:
-    "radial-gradient(circle at 50% 0%, rgba(70,130,255,0.08) 0%, rgba(70,130,255,0.03) 28%, rgba(70,130,255,0) 58%)",
   card:
     "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(14,27,42,0.98) 44%, rgba(10,20,33,1) 100%)",
-  cardTop:
-    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.014) 26%, rgba(255,255,255,0) 58%)",
-  thumb:
-    "linear-gradient(180deg, rgba(34,44,56,0.46) 0%, rgba(15,21,29,0.8) 100%)",
+  cardSoft:
+    "linear-gradient(180deg, rgba(14,27,44,0.76) 0%, rgba(8,16,27,0.68) 100%)",
   text: "#F5FAFF",
   textSoft: "#D7E5F0",
   textMuted: "#9CB1C1",
-  textDim: "#73889A",
-  line: "rgba(255,255,255,0.09)",
   lineSoft: "rgba(255,255,255,0.055)",
   lineFaint: "rgba(255,255,255,0.032)",
   border: "1px solid rgba(109, 142, 176, 0.24)",
   borderSoft: "1px solid rgba(255,255,255,0.085)",
-  borderFaint: "1px solid rgba(255,255,255,0.05)",
   shellShadow: "0 34px 90px rgba(0,0,0,0.5)",
   panelShadow: "0 18px 42px rgba(0,0,0,0.24)",
   cardShadow: "0 10px 22px rgba(0,0,0,0.16)",
@@ -160,8 +101,12 @@ const THEME = {
   emerald: "#27D9BF",
   emeraldSoft: "rgba(39,217,191,0.18)",
   emeraldLine: "rgba(39,217,191,0.84)",
-  red: "#FF6D7C",
-  redSoft: "rgba(255,109,124,0.18)",
+  red: "#FF6B7A",
+  redSoft: "rgba(255,107,122,0.18)",
+  redLine: "rgba(255,107,122,0.84)",
+  yellow: "#F5C451",
+  yellowSoft: "rgba(245,196,81,0.18)",
+  yellowLine: "rgba(245,196,81,0.84)",
   buttonBlue:
     "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
 };
@@ -170,29 +115,189 @@ function getBrowserSupabaseClient(): SupabaseClient | null {
   if (typeof window === "undefined") return null;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !anonKey) return null;
+  if (!url || !key) return null;
 
-  return createClient(url, anonKey);
+  return createClient(url, key);
 }
+
+function normalizeJobStatus(status: string | null | undefined): ShopJobStatus {
+  if (status === "New Intake") return "New Intake";
+  if (status === "Waiting on Approval") return "Waiting on Approval";
+  if (status === "Approved") return "Approved";
+  if (status === "In Progress") return "In Progress";
+  if (status === "Waiting on Parts") return "Waiting on Parts";
+  if (status === "Ready for Pickup") return "Ready for Pickup";
+  if (status === "Completed") return "Completed";
+  if (status === "Declined") return "Declined";
+  return "New Intake";
+}
+
+function pickVehicle(job: JobRow): VehicleRow | null {
+  const source = job.vehicle ?? job.vehicles ?? null;
+  if (!source) return null;
+  return Array.isArray(source) ? source[0] ?? null : source;
+}
+
+function formatVehicleLabel(vehicle: VehicleRow | null) {
+  if (!vehicle) return "Unknown Vehicle";
+
+  const label = [vehicle.year, vehicle.make, vehicle.model]
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .join(" ")
+    .trim();
+
+  return label || "Unknown Vehicle";
+}
+
+function extractConcern(job: JobRow) {
+  if (job.concern?.trim()) return job.concern.trim();
+
+  if (job.notes?.trim()) {
+    const concernLine = job.notes
+      .split("\n")
+      .find((line) => line.toLowerCase().startsWith("concern:"));
+
+    if (concernLine) {
+      return concernLine.replace(/^concern:\s*/i, "").trim();
+    }
+
+    return job.notes.trim();
+  }
+
+  if (job.findings?.trim()) return job.findings.trim();
+
+  return "No concern entered";
+}
+
+function formatCreatedAt(dateString: string | null | undefined) {
+  if (!dateString) return "No date";
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "No date";
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getRelativeAge(dateString: string | null | undefined) {
+  if (!dateString) return "Unknown";
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+
+  const diffMs = Date.now() - date.getTime();
+  const minutes = Math.max(1, Math.floor(diffMs / 60000));
+
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function getJobTone(status: ShopJobStatus): StatusTone {
+  if (status === "Ready for Pickup" || status === "Completed") return "green";
+  if (status === "Waiting on Approval" || status === "Waiting on Parts") return "yellow";
+  if (status === "Declined") return "red";
+  if (status === "Approved" || status === "In Progress") return "blue";
+  return "blue";
+}
+
+function toneColor(tone: StatusTone) {
+  if (tone === "green") {
+    return {
+      text: THEME.emerald,
+      soft: THEME.emeraldSoft,
+      line: THEME.emeraldLine,
+    };
+  }
+
+  if (tone === "yellow") {
+    return {
+      text: THEME.yellow,
+      soft: THEME.yellowSoft,
+      line: THEME.yellowLine,
+    };
+  }
+
+  if (tone === "blue") {
+    return {
+      text: THEME.blue,
+      soft: THEME.blueSoft,
+      line: THEME.blueLine,
+    };
+  }
+
+  return {
+    text: THEME.red,
+    soft: THEME.redSoft,
+    line: THEME.redLine,
+  };
+}
+
+function getSectionAccent(title: string): Accent {
+  if (title === "Intake Needed") return "orange";
+  if (title === "Completed") return "emerald";
+  return "blue";
+}
+
+const ghostButton: CSSProperties = {
+  height: 50,
+  borderRadius: 16,
+  border: THEME.borderSoft,
+  background:
+    "linear-gradient(180deg, rgba(18,31,47,0.92) 0%, rgba(11,21,33,0.94) 100%)",
+  color: THEME.text,
+  padding: "0 16px",
+  fontSize: "0.94rem",
+  fontWeight: 800,
+  letterSpacing: "-0.02em",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+  cursor: "pointer",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.18)",
+};
+
+const primaryButton: CSSProperties = {
+  height: 50,
+  borderRadius: 16,
+  border: "1px solid rgba(104, 164, 255, 0.72)",
+  background: THEME.buttonBlue,
+  color: "#F8FBFF",
+  padding: "0 20px",
+  fontSize: "0.96rem",
+  fontWeight: 900,
+  letterSpacing: "-0.02em",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+  cursor: "pointer",
+  boxShadow:
+    "0 14px 24px rgba(21,101,219,0.24), inset 0 1px 0 rgba(255,255,255,0.14)",
+};
 
 export default function ShopProofDashboardPage() {
   const router = useRouter();
+
   const [width, setWidth] = useState(1440);
-
   const [jobs, setJobs] = useState<JobRow[]>([]);
-  const [loadingJobs, setLoadingJobs] = useState(true);
-  const [jobsError, setJobsError] = useState<string | null>(null);
-
-  const [parts] = useState<PartCardData[]>([]);
-  const [inventory] = useState<InventoryItemData[]>([]);
-  const [techs] = useState<TechCardData[]>([]);
-  const [alerts] = useState<AlertItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
     const onResize = () => setWidth(window.innerWidth);
     onResize();
     window.addEventListener("resize", onResize);
@@ -200,154 +305,139 @@ export default function ShopProofDashboardPage() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
+  const isMobile = width < 820;
 
-    async function fetchDashboardJobs() {
-      setLoadingJobs(true);
-      setJobsError(null);
+  const loadJobs = async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
+    setError(null);
+
+    try {
       const client = getBrowserSupabaseClient();
 
-      if (!client) {
-        if (!isMounted) return;
-        setJobs([]);
-        setJobsError("Supabase environment variables are missing.");
-        setLoadingJobs(false);
-        return;
-      }
-
-      const { data, error } = await client
-        .from("jobs")
-        .select(`
-          id,
-          shop_id,
-          customer_id,
-          vehicle_id,
-          status,
-          approval_status,
-          assigned_to,
-          notes,
-          created_at,
-          vehicle:vehicles!jobs_vehicle_id_fkey (
+      if (client) {
+        const { data, error } = await client
+          .from("jobs")
+          .select(`
             id,
             shop_id,
             customer_id,
-            year,
-            make,
-            model,
-            vin,
-            plate,
-            created_at
-          )
-        `)
-        .order("created_at", { ascending: false });
+            vehicle_id,
+            status,
+            approval_status,
+            assigned_to,
+            concern,
+            notes,
+            findings,
+            created_at,
+            updated_at,
+            vehicle:vehicles!jobs_vehicle_id_fkey (
+              id,
+              year,
+              make,
+              model,
+              vin,
+              plate,
+              created_at
+            )
+          `)
+          .order("created_at", { ascending: false });
 
-      if (!isMounted) return;
+        if (error) throw error;
 
-      if (error) {
-        console.error("Error fetching dashboard jobs:", error);
-        setJobs([]);
-        setJobsError(error.message);
-      } else {
         setJobs((data as JobRow[]) || []);
+      } else {
+        const localRaw = window.localStorage.getItem("shopproof_jobs");
+        const parsed = localRaw ? JSON.parse(localRaw) : [];
+        setJobs(Array.isArray(parsed) ? parsed : []);
       }
+    } catch (err: any) {
+      console.error("Dashboard load error:", err);
 
-      setLoadingJobs(false);
+      try {
+        const localRaw = window.localStorage.getItem("shopproof_jobs");
+        const parsed = localRaw ? JSON.parse(localRaw) : [];
+
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setJobs(parsed);
+          setError("Loaded local backup data.");
+        } else {
+          setJobs([]);
+          setError(err?.message || "Unable to load ShopPROOF jobs.");
+        }
+      } catch {
+        setJobs([]);
+        setError(err?.message || "Unable to load ShopPROOF jobs.");
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  };
 
-    fetchDashboardJobs();
-
-    return () => {
-      isMounted = false;
-    };
+  useEffect(() => {
+    loadJobs();
   }, []);
 
-  const isMobile = width < 920;
-  const isTablet = width >= 920 && width < 1320;
-
-  const normalizedJobs = useMemo(() => {
+  const normalizedJobs = useMemo<DashboardJobCard[]>(() => {
     return jobs.map((job) => {
-      const vehicle = Array.isArray(job.vehicle) ? job.vehicle[0] ?? null : job.vehicle;
+      const vehicle = pickVehicle(job);
+      const status = normalizeJobStatus(job.status);
+
       return {
-        ...job,
-        vehicle,
+        id: job.id,
+        status,
+        vehicleLabel: formatVehicleLabel(vehicle),
+        vin: vehicle?.vin?.trim() || "No VIN",
+        concern: extractConcern(job),
+        createdAt: job.created_at ?? null,
+        updatedAt: job.updated_at ?? null,
+        assignedTo: job.assigned_to?.trim() || "Unassigned",
       };
     });
   }, [jobs]);
 
-  const vehicles = useMemo<VehicleCardData[]>(() => {
-    return normalizedJobs
-      .filter((job) => {
-        const status = normalizeVehicleStatus(job.status);
-        return !!job.vehicle && !!status;
-      })
-      .map((job) => {
-        const vehicle = job.vehicle as VehicleRow;
-        const status = normalizeVehicleStatus(job.status) as VehicleStatus;
+  const filteredJobs = useMemo(() => {
+    const term = search.trim().toLowerCase();
 
-        return {
-          id: job.id,
-          year: vehicle.year || "",
-          make: vehicle.make || "",
-          model: vehicle.model || "",
-          vin: vehicle.vin || "No VIN",
-          status,
-          accent: getVehicleAccent(status),
-          img: getVehicleImage(status),
-        };
-      });
-  }, [normalizedJobs]);
+    if (!term) return normalizedJobs;
 
-  const approvals = useMemo<ApprovalCardData[]>(() => {
-    return normalizedJobs
-      .filter((job) => {
-        const approvalStatus = normalizeApprovalStatus(job.approval_status);
-        return !!job.vehicle && approvalStatus === "Pending Approval";
-      })
-      .map((job) => {
-        const vehicle = job.vehicle as VehicleRow;
-        const vehicleLabel = formatVehicleLabel(vehicle);
-        const concern = job.notes?.trim() || "Estimate details pending";
-        const approvalStatus = normalizeApprovalStatus(job.approval_status) as ApprovalStatus;
+    return normalizedJobs.filter((job) => {
+      return (
+        job.vehicleLabel.toLowerCase().includes(term) ||
+        job.vin.toLowerCase().includes(term) ||
+        job.concern.toLowerCase().includes(term) ||
+        job.status.toLowerCase().includes(term) ||
+        job.assignedTo.toLowerCase().includes(term)
+      );
+    });
+  }, [normalizedJobs, search]);
 
-        return {
-          id: job.id,
-          vehicle: vehicleLabel,
-          concern,
-          estimate: "Pending Estimate",
-          status: approvalStatus,
-          accent: "orange",
-          img: getApprovalImage(),
-        };
-      });
-  }, [normalizedJobs]);
+  const intakeNeeded = filteredJobs.filter(
+    (job) => job.status === "New Intake" || job.status === "Waiting on Approval"
+  );
 
-  const activeRepairs = useMemo<RepairCardData[]>(() => {
-    return normalizedJobs
-      .filter((job) => {
-        const status = normalizeVehicleStatus(job.status);
-        return (
-          status === "In Progress" ||
-          status === "Waiting on Parts" ||
-          status === "Diagnostics"
-        );
-      })
-      .map((job) => {
-        const vehicle = job.vehicle as VehicleRow | null;
-        const status = normalizeVehicleStatus(job.status) as VehicleStatus;
-        const created = formatDueText(job.created_at);
+  const inProgress = filteredJobs.filter(
+    (job) =>
+      job.status === "Approved" ||
+      job.status === "In Progress" ||
+      job.status === "Waiting on Parts"
+  );
 
-        return {
-          id: job.id,
-          title: status,
-          vehicle: vehicle ? formatVehicleLabel(vehicle) : "Unknown Vehicle",
-          due: created,
-          accent: status === "Waiting on Parts" ? "orange" : "blue",
-          img: getRepairImage(status),
-        };
-      });
-  }, [normalizedJobs]);
+  const completed = filteredJobs.filter(
+    (job) =>
+      job.status === "Ready for Pickup" ||
+      job.status === "Completed" ||
+      job.status === "Declined"
+  );
+
+  const totalVisible = filteredJobs.length;
+  const needsAttentionCount = intakeNeeded.length;
+  const hasAnyJobs = normalizedJobs.length > 0;
 
   return (
     <main
@@ -374,18 +464,18 @@ export default function ShopProofDashboardPage() {
           ${THEME.pageBase}
         `,
         color: THEME.text,
-        padding: isMobile ? "12px" : "22px",
+        padding: isMobile ? "8px" : "18px",
       }}
     >
       <div
         style={{
-          maxWidth: 1410,
+          maxWidth: "1360px",
           margin: "0 auto",
-          borderRadius: 24,
-          overflow: "hidden",
           background: THEME.shell,
           border: THEME.border,
+          borderRadius: "30px",
           boxShadow: THEME.shellShadow,
+          overflow: "hidden",
           position: "relative",
         }}
       >
@@ -394,27 +484,17 @@ export default function ShopProofDashboardPage() {
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
-            background: `
-              ${THEME.shellInner},
-              radial-gradient(circle at 50% 0%, rgba(71,123,255,0.14) 0%, rgba(71,123,255,0.05) 20%, rgba(71,123,255,0) 44%),
-              repeating-linear-gradient(
-                135deg,
-                rgba(255,255,255,0.012) 0px,
-                rgba(255,255,255,0.012) 1px,
-                transparent 1px,
-                transparent 9px
-              )
-            `,
-            opacity: 0.95,
+            background:
+              "radial-gradient(circle at 22% 0%, rgba(59,130,246,0.18), transparent 32%), radial-gradient(circle at 78% 0%, rgba(39,217,191,0.10), transparent 24%)",
           }}
         />
 
         <div
           style={{
             position: "absolute",
-            left: 22,
-            right: 22,
-            top: 64,
+            left: isMobile ? 12 : 22,
+            right: isMobile ? 12 : 22,
+            top: isMobile ? 56 : 64,
             height: 2,
             background:
               "linear-gradient(90deg, rgba(59,130,246,0) 0%, rgba(59,130,246,0.38) 22%, rgba(59,130,246,0.72) 50%, rgba(59,130,246,0.38) 78%, rgba(59,130,246,0) 100%)",
@@ -423,1863 +503,741 @@ export default function ShopProofDashboardPage() {
           }}
         />
 
-        <TopBar
-          isMobile={isMobile}
-          vehicleCount={vehicles.length}
-          partsCount={parts.length}
-          pickupCount={
-            vehicles.filter((vehicle) => vehicle.status === "Ready for Pickup").length
-          }
-          onCreateJob={() => router.push("/shopproof/new")}
-        />
+        <div
+          style={{
+            minHeight: isMobile ? "auto" : 84,
+            padding: isMobile ? "10px 10px 8px" : "15px 18px",
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "auto 1fr auto",
+            gap: isMobile ? 10 : 12,
+            alignItems: "center",
+            borderBottom: `1px solid ${THEME.lineFaint}`,
+            position: "relative",
+            background:
+              "linear-gradient(180deg, rgba(10,20,31,0.86) 0%, rgba(6,13,22,0.5) 100%)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: isMobile ? 10 : 12,
+              minWidth: 0,
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            <div
+              style={{
+                width: isMobile ? 38 : 42,
+                height: isMobile ? 38 : 42,
+                borderRadius: 12,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: THEME.borderSoft,
+                background:
+                  "linear-gradient(180deg, rgba(17,32,48,0.98) 0%, rgba(10,19,29,0.98) 100%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18)",
+                flexShrink: 0,
+              }}
+            >
+              <Shield size={isMobile ? 20 : 22} strokeWidth={2.1} color={THEME.blue} />
+            </div>
+
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: isMobile ? 18 : 28,
+                  lineHeight: 1,
+                  fontWeight: 900,
+                  letterSpacing: "-0.04em",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{ color: THEME.text }}>Shop</span>
+                <span style={{ color: "#78ABFF" }}>PROOF</span>
+              </div>
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: THEME.textMuted,
+                  marginTop: 5,
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Internal operations dashboard
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile
+                ? "repeat(2, minmax(0, 1fr))"
+                : "repeat(4, minmax(0, 1fr))",
+              gap: 8,
+              minWidth: 0,
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            <TopStatusBox title={`${totalVisible}`} value="Visible Jobs" />
+            <TopStatusBox title={`${intakeNeeded.length}`} value="Intake Needed" />
+            <TopStatusBox title={`${inProgress.length}`} value="In Progress" />
+            <TopStatusBox title={`${completed.length}`} value="Completed" />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: isMobile ? "stretch" : "flex-end",
+              position: "relative",
+              zIndex: 1,
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              style={{ ...ghostButton, width: isMobile ? "100%" : undefined }}
+              onClick={() => loadJobs(true)}
+              disabled={refreshing}
+            >
+              {refreshing ? <LoaderCircle size={15} className="spin" /> : <Clock3 size={15} />}
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
+
+            <button
+              type="button"
+              style={{ ...primaryButton, width: isMobile ? "100%" : undefined }}
+              onClick={() => router.push("/shopproof/new")}
+            >
+              New Intake
+            </button>
+          </div>
+        </div>
 
         <div
           style={{
-            padding: isMobile ? "12px" : "18px",
-            display: "grid",
-            gap: 14,
             position: "relative",
-            zIndex: 1,
+            padding: isMobile ? "14px 10px 16px" : "16px",
           }}
         >
-          <section
+          <div
             style={{
-              display: "grid",
-              gridTemplateColumns: isMobile
-                ? "1fr"
-                : isTablet
-                  ? "1fr"
-                  : "0.92fr 1.52fr 0.84fr",
-              gap: 14,
-              alignItems: "start",
+              background: THEME.panel,
+              border: THEME.borderSoft,
+              borderRadius: "24px",
+              boxShadow: THEME.panelShadow,
+              overflow: "hidden",
             }}
           >
-            <Panel
-              title="Vehicles In Shop"
-              icon={<CarFront size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/vehicles"
+            <div
+              style={{
+                padding: isMobile ? "14px 14px" : "16px 20px",
+                borderBottom: `1px solid ${THEME.lineSoft}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
             >
-              {loadingJobs ? (
-                <EmptyState
-                  icon={<CarFront size={28} strokeWidth={2.2} color={THEME.blue} />}
-                  title="Loading live shop vehicles"
-                  text="Pulling active vehicle jobs from Supabase now."
-                />
-              ) : jobsError ? (
-                <EmptyState
-                  icon={<AlertTriangle size={28} strokeWidth={2.2} color={THEME.red} />}
-                  title="Could not load vehicles"
-                  text={`Live job data did not load. ${jobsError}`}
-                  actionLabel="Open Vehicles"
-                  onAction={() => router.push("/shopproof/dashboard/vehicles")}
-                />
-              ) : vehicles.length === 0 ? (
-                <EmptyState
-                  icon={<CarFront size={28} strokeWidth={2.2} color={THEME.blue} />}
-                  title="No vehicles in shop yet"
-                  text="Customer vehicles will appear here once jobs are created and moved into the shop workflow."
-                  actionLabel="Open Vehicles"
-                  onAction={() => router.push("/shopproof/dashboard/vehicles")}
-                />
-              ) : (
-                <>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {vehicles.map((vehicle) => (
-                      <VehicleCard key={vehicle.id} vehicle={vehicle} />
-                    ))}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <FileText size={16} color={THEME.textSoft} />
+                <div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      letterSpacing: "-0.03em",
+                      fontSize: "1.06rem",
+                    }}
+                  >
+                    Dashboard
                   </div>
-                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/vehicles")} />
-                </>
-              )}
-            </Panel>
+                  <div
+                    style={{
+                      fontSize: "0.84rem",
+                      color: THEME.textMuted,
+                      marginTop: 2,
+                    }}
+                  >
+                    Intake, active work, and completed records in one operational view
+                  </div>
+                </div>
+              </div>
+            </div>
 
-            <Panel
-              title="Jobs Waiting for Approval"
-              icon={<Bell size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/approvals"
-            >
-              {loadingJobs ? (
-                <EmptyState
-                  icon={<Bell size={28} strokeWidth={2.2} color={THEME.orange} />}
-                  title="Loading approval queue"
-                  text="Checking live jobs for pending customer approvals."
-                />
-              ) : jobsError ? (
-                <EmptyState
-                  icon={<AlertTriangle size={28} strokeWidth={2.2} color={THEME.red} />}
-                  title="Could not load approvals"
-                  text={`Live approval data did not load. ${jobsError}`}
-                  actionLabel="Open Approvals"
-                  onAction={() => router.push("/shopproof/dashboard/approvals")}
-                />
-              ) : approvals.length === 0 ? (
-                <EmptyState
-                  icon={<Bell size={28} strokeWidth={2.2} color={THEME.orange} />}
-                  title="No jobs waiting for approval"
-                  text="Pending approvals will show here when customer estimates are ready for review and authorization."
-                  actionLabel="Open Approvals"
-                  onAction={() => router.push("/shopproof/dashboard/approvals")}
-                />
-              ) : (
-                <>
+            <div style={{ padding: isMobile ? "12px 10px 14px" : "12px" }}>
+              <div style={{ display: "grid", gap: "12px" }}>
+                <SectionCard
+                  icon={<Search size={17} />}
+                  title="Search + Snapshot"
+                  subtitle="Find jobs fast and keep the shop's current workload visible"
+                  accent="blue"
+                >
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-                      gap: 10,
+                      gridTemplateColumns: isMobile
+                        ? "1fr"
+                        : "minmax(0, 1.6fr) minmax(260px, 0.8fr)",
+                      gap: "10px",
+                      alignItems: "end",
                     }}
                   >
-                    {approvals.map((job) => (
-                      <ApprovalCard key={job.id} job={job} />
-                    ))}
+                    <InputBlock
+                      label="Search Jobs"
+                      value={search}
+                      onChange={setSearch}
+                      placeholder="Search vehicle, VIN, concern, tech, status, or customer"
+                    />
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: "10px",
+                      }}
+                    >
+                      <SummaryTile label="Needs Attention" value={`${needsAttentionCount}`} />
+                      <SummaryTile label="All Visible" value={`${totalVisible}`} />
+                    </div>
                   </div>
-                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/approvals")} />
-                </>
-              )}
-            </Panel>
 
-            <Panel
-              title="Active Repairs"
-              icon={<Wrench size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/repairs"
-              headerRight={
-                <div style={{ display: "flex", gap: 6 }}>
-                  <MiniHeaderIcon>
-                    <ChevronLeft size={11} strokeWidth={2.5} />
-                  </MiniHeaderIcon>
-                  <MiniHeaderIcon>
-                    <Bell size={11} strokeWidth={2.2} />
-                  </MiniHeaderIcon>
-                </div>
-              }
-            >
-              {loadingJobs ? (
-                <EmptyState
-                  compact
-                  icon={<Wrench size={26} strokeWidth={2.2} color={THEME.blue} />}
-                  title="Loading active repairs"
-                  text="Pulling current repair status from live jobs."
-                  actionLabel="Open Repairs"
-                  onAction={() => router.push("/shopproof/dashboard/repairs")}
-                />
-              ) : jobsError ? (
-                <EmptyState
-                  compact
-                  icon={<AlertTriangle size={26} strokeWidth={2.2} color={THEME.red} />}
-                  title="Could not load repairs"
-                  text={`Live repair data did not load. ${jobsError}`}
-                  actionLabel="Open Repairs"
-                  onAction={() => router.push("/shopproof/dashboard/repairs")}
-                />
-              ) : activeRepairs.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={<Wrench size={26} strokeWidth={2.2} color={THEME.blue} />}
-                  title="No active repairs right now"
-                  text="Vehicles currently in service will appear here so the shop can monitor work in progress."
-                  actionLabel="Open Repairs"
-                  onAction={() => router.push("/shopproof/dashboard/repairs")}
-                />
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {activeRepairs.map((repair) => (
-                    <RepairCard key={repair.id} repair={repair} />
-                  ))}
-                </div>
-              )}
-            </Panel>
-          </section>
+                  {error ? (
+                    <div
+                      style={{
+                        marginTop: "12px",
+                        padding: "10px 12px",
+                        borderRadius: "12px",
+                        background: "rgba(255,107,122,0.12)",
+                        border: "1px solid rgba(255,107,122,0.28)",
+                        color: THEME.red,
+                        fontSize: "0.82rem",
+                        fontWeight: 800,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <AlertCircle size={14} />
+                      {error}
+                    </div>
+                  ) : null}
+                </SectionCard>
 
-          <section
-            style={{
-              display: "grid",
-              gridTemplateColumns: isMobile
-                ? "1fr"
-                : isTablet
-                  ? "1fr"
-                  : "0.92fr 0.92fr 1.16fr",
-              gap: 14,
-              alignItems: "start",
-            }}
-          >
-            <Panel
-              title="Parts"
-              icon={<Package2 size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/parts"
-            >
-              {parts.length === 0 ? (
-                <EmptyState
-                  icon={<ShoppingCart size={28} strokeWidth={2.2} color={THEME.orange} />}
-                  title="No parts activity yet"
-                  text="Track parts needed, ordered, received, and attached to customer jobs or quick walk-in tickets."
-                  actionLabel="Open Parts Desk"
-                  onAction={() => router.push("/shopproof/dashboard/parts")}
-                />
-              ) : (
-                <>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {parts.map((part) => (
-                      <PartsCard key={part.id} part={part} />
-                    ))}
-                  </div>
-                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/parts")} />
-                </>
-              )}
-            </Panel>
+                {!loading && !hasAnyJobs ? (
+                  <FirstRunCard
+                    onCreate={() => router.push("/shopproof/new")}
+                  />
+                ) : null}
 
-            <Panel
-              title="Inventory"
-              icon={<Boxes size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/inventory"
-            >
-              {inventory.length === 0 ? (
-                <EmptyState
-                  icon={<Boxes size={28} strokeWidth={2.2} color={THEME.emerald} />}
-                  title="No inventory tracked yet"
-                  text="Monitor shelf stock like oil, filters, brake cleaner, silicone, and other shop supplies separately from customer parts."
-                  actionLabel="Open Inventory"
-                  onAction={() => router.push("/shopproof/dashboard/inventory")}
-                />
-              ) : (
-                <>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {inventory.map((item) => (
-                      <InventoryRow key={item.id} item={item} />
-                    ))}
-                  </div>
-                  <PanelFooter onClick={() => router.push("/shopproof/dashboard/inventory")} />
-                </>
-              )}
-            </Panel>
-
-            <Panel
-              title="Technician Assignments"
-              icon={<UserCircle2 size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/team"
-              headerRight={
-                <div style={{ display: "flex", gap: 6 }}>
-                  <MiniHeaderIcon>
-                    <ChevronLeft size={11} strokeWidth={2.5} />
-                  </MiniHeaderIcon>
-                  <MiniHeaderIcon>
-                    <Bell size={11} strokeWidth={2.2} />
-                  </MiniHeaderIcon>
-                </div>
-              }
-            >
-              {techs.length === 0 ? (
-                <EmptyState
-                  icon={<UserCircle2 size={28} strokeWidth={2.2} color={THEME.emerald} />}
-                  title="No technician assignments yet"
-                  text="As jobs are assigned to your team, technician workload and repair visibility will populate here."
-                  actionLabel="Open Team Board"
-                  onAction={() => router.push("/shopproof/dashboard/team")}
-                />
-              ) : (
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: isMobile ? "1fr" : "1.02fr 1.28fr",
-                    gap: 12,
+                    gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                    gap: "12px",
                   }}
                 >
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {techs.map((tech) => (
-                      <TechRow key={tech.id} tech={tech} />
-                    ))}
-                  </div>
+                  <DashboardSection
+                    title="Intake Needed"
+                    subtitle="New arrivals and jobs still waiting to be pushed forward."
+                    accent={getSectionAccent("Intake Needed")}
+                    items={intakeNeeded}
+                    emptyText={
+                      loading ? "Loading intake-needed vehicles..." : "No intake-needed vehicles right now."
+                    }
+                    onOpen={(id) => router.push(`/shopproof/jobs/${id}`)}
+                  />
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
-                      gap: 10,
-                    }}
-                  >
-                    <ProofFrame
-                      title="Before"
-                      subtitle="Initial condition"
-                      img="/images/driveproof-damage.jpg"
-                    />
-                    <ProofFrame
-                      title="During"
-                      subtitle="Work in progress"
-                      img="/images/fleetproof-inspection.png"
-                    />
-                    <ProofFrame
-                      title="After"
-                      subtitle="Completed repair"
-                      img="/images/equipment-proof.jpg"
-                    />
-                  </div>
-                </div>
-              )}
-            </Panel>
-          </section>
+                  <DashboardSection
+                    title="In Progress"
+                    subtitle="Vehicles actively being diagnosed, approved, repaired, or waiting on parts."
+                    accent={getSectionAccent("In Progress")}
+                    items={inProgress}
+                    emptyText={loading ? "Loading active jobs..." : "No active jobs in progress."}
+                    onOpen={(id) => router.push(`/shopproof/jobs/${id}`)}
+                  />
 
-          <section>
-            <Panel
-              title="Alerts & Issues"
-              icon={<AlertTriangle size={15} strokeWidth={2.2} />}
-              href="/shopproof/dashboard/alerts"
-            >
-              {alerts.length === 0 ? (
-                <EmptyState
-                  compact
-                  icon={<AlertTriangle size={26} strokeWidth={2.2} color={THEME.red} />}
-                  title="No alerts or issues"
-                  text="Warnings, urgent concerns, and high-priority items will surface here when they need attention."
-                  actionLabel="Open Alerts"
-                  onAction={() => router.push("/shopproof/dashboard/alerts")}
-                />
-              ) : (
-                <div style={{ display: "grid", gap: 0 }}>
-                  {alerts.map((alert, index) => (
-                    <AlertRow
-                      key={alert.id}
-                      alert={alert}
-                      isLast={index === alerts.length - 1}
-                    />
-                  ))}
+                  <DashboardSection
+                    title="Completed"
+                    subtitle="Ready for pickup, completed, or declined jobs with final closeout."
+                    accent={getSectionAccent("Completed")}
+                    items={completed}
+                    emptyText={
+                      loading ? "Loading completed jobs..." : "No completed or released jobs yet."
+                    }
+                    onOpen={(id) => router.push(`/shopproof/jobs/${id}`)}
+                  />
                 </div>
-              )}
-            </Panel>
-          </section>
+
+                <InternalFooter isMobile={isMobile} />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+      `}</style>
     </main>
   );
 }
 
-function TopBar({
-  isMobile,
-  vehicleCount,
-  partsCount,
-  pickupCount,
-  onCreateJob,
-}: {
-  isMobile: boolean;
-  vehicleCount: number;
-  partsCount: number;
-  pickupCount: number;
-  onCreateJob: () => void;
-}) {
-  return (
-    <div
-      style={{
-        minHeight: isMobile ? "auto" : 84,
-        padding: isMobile ? "14px 14px 12px" : "15px 18px",
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "auto 1fr auto",
-        gap: isMobile ? 12 : 14,
-        alignItems: "center",
-        borderBottom: `1px solid ${THEME.lineFaint}`,
-        position: "relative",
-        background:
-          "linear-gradient(180deg, rgba(10,20,31,0.86) 0%, rgba(6,13,22,0.5) 100%)",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: `
-            linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.008) 22%, rgba(255,255,255,0) 54%),
-            radial-gradient(circle at 50% 0%, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 24%, rgba(59,130,246,0) 54%)
-          `,
-        }}
-      />
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          minWidth: 0,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            width: 42,
-            height: 42,
-            borderRadius: 12,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: THEME.borderSoft,
-            background:
-              "linear-gradient(180deg, rgba(17,32,48,0.98) 0%, rgba(10,19,29,0.98) 100%)",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18)",
-            flexShrink: 0,
-          }}
-        >
-          <Shield size={22} strokeWidth={2.1} color={THEME.blue} />
-        </div>
-
-        <div
-          style={{
-            fontSize: isMobile ? 22 : 28,
-            lineHeight: 1,
-            fontWeight: 900,
-            letterSpacing: "-0.04em",
-            whiteSpace: "nowrap",
-            textShadow: "0 2px 18px rgba(0,0,0,0.28)",
-          }}
-        >
-          <span style={{ color: THEME.text }}>Shop</span>
-          <span style={{ color: "#78ABFF" }}>PROOF</span>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 10,
-          minWidth: 0,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <TopMetric value={String(vehicleCount)} label="Vehicles in Shop" />
-        <TopMetric value={String(partsCount)} label="Part Orders" />
-        <TopMetric value={String(pickupCount)} label="Ready for Pickup" />
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: isMobile ? "flex-start" : "flex-end",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <button type="button" style={primaryActionButton} onClick={onCreateJob}>
-          <Plus size={13} strokeWidth={2.7} />
-          Job
-        </button>
-
-        <SquareActionButton>
-          <Bell size={14} strokeWidth={2.2} />
-        </SquareActionButton>
-
-        <AvatarAction />
-      </div>
-    </div>
-  );
-}
-
-function TopMetric({
+function TopStatusBox({
+  title,
   value,
-  label,
 }: {
+  title: string;
   value: string;
-  label: string;
 }) {
   return (
     <div
       style={{
-        height: 46,
-        borderRadius: 10,
+        minHeight: "50px",
+        borderRadius: "14px",
+        border: `1px solid ${THEME.lineSoft}`,
         background:
-          "linear-gradient(180deg, rgba(21,31,44,0.98) 0%, rgba(13,23,35,0.98) 100%)",
-        border: THEME.borderSoft,
+          "linear-gradient(180deg, rgba(14,27,44,0.72) 0%, rgba(8,16,27,0.62) 100%)",
         display: "flex",
         alignItems: "center",
-        padding: "0 13px",
-        gap: 8,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.12)",
-        minWidth: 0,
-        position: "relative",
-        overflow: "hidden",
+        gap: "8px",
+        padding: "0 12px",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.008) 26%, rgba(255,255,255,0) 60%)",
-        }}
-      />
-
       <span
         style={{
-          fontSize: 18,
-          lineHeight: 1,
           fontWeight: 900,
+          color: THEME.text,
+          fontSize: "0.92rem",
           letterSpacing: "-0.03em",
+        }}
+      >
+        {title}
+      </span>
+      <span
+        style={{
+          color: THEME.textSoft,
+          fontSize: "0.8rem",
+          fontWeight: 700,
+          opacity: 0.92,
           whiteSpace: "nowrap",
-          flexShrink: 0,
-          position: "relative",
-          zIndex: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
         }}
       >
         {value}
       </span>
-
-      <span
-        style={{
-          fontSize: 11,
-          color: THEME.textSoft,
-          fontWeight: 800,
-          lineHeight: 1.05,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          minWidth: 0,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {label}
-      </span>
     </div>
   );
 }
 
-function Panel({
-  title,
+function SectionCard({
   icon,
+  title,
+  subtitle,
+  accent,
   children,
-  headerRight,
-  href,
 }: {
+  icon: ReactNode;
   title: string;
-  icon?: ReactNode;
+  subtitle: string;
+  accent: Accent;
   children: ReactNode;
-  headerRight?: ReactNode;
-  href?: string;
 }) {
-  const router = useRouter();
+  const accentMap: Record<Accent, string> = {
+    blue: THEME.blueLine,
+    orange: THEME.orangeLine,
+    emerald: THEME.emeraldLine,
+  };
 
   return (
     <section
-      onClick={() => href && router.push(href)}
       style={{
-        borderRadius: 18,
+        background: THEME.card,
+        border: THEME.borderSoft,
+        borderRadius: "20px",
+        boxShadow: THEME.cardShadow,
         overflow: "hidden",
-        background: THEME.panel,
-        border: THEME.border,
-        boxShadow: THEME.panelShadow,
         position: "relative",
-        cursor: href ? "pointer" : "default",
-        transition: "transform 160ms ease, box-shadow 160ms ease",
-      }}
-      onMouseEnter={(e) => {
-        if (!href) return;
-        e.currentTarget.style.transform = "translateY(-1px)";
-        e.currentTarget.style.boxShadow = "0 22px 48px rgba(0,0,0,0.28)";
-      }}
-      onMouseLeave={(e) => {
-        if (!href) return;
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = THEME.panelShadow;
       }}
     >
       <div
         style={{
           position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: `${THEME.panelTop}, ${THEME.panelEdgeGlow}`,
-          opacity: 0.95,
+          inset: "0 auto 0 0",
+          width: "3px",
+          background: accentMap[accent],
         }}
       />
 
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 17,
-          pointerEvents: "none",
-          border: "1px solid rgba(255,255,255,0.035)",
-        }}
-      />
-
-      <div
-        style={{
-          height: 50,
-          padding: "0 14px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          borderBottom: `1px solid ${THEME.lineSoft}`,
-          position: "relative",
-          zIndex: 1,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 60%, rgba(255,255,255,0) 100%)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            minWidth: 0,
-          }}
-        >
-          <span
+      <div style={{ padding: "13px 14px 12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+          <div
             style={{
               color: THEME.textSoft,
-              display: "inline-flex",
+              marginTop: "2px",
               flexShrink: 0,
-              opacity: 0.95,
             }}
           >
             {icon}
-          </span>
+          </div>
 
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 15,
-              lineHeight: 1,
-              fontWeight: 900,
-              letterSpacing: "-0.02em",
-              color: THEME.text,
-              whiteSpace: "nowrap",
-              textShadow: "0 2px 10px rgba(0,0,0,0.22)",
-            }}
-          >
-            {title}
-          </h2>
+          <div>
+            <div
+              style={{
+                fontSize: "1rem",
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+                color: THEME.text,
+              }}
+            >
+              {title}
+            </div>
+            <div
+              style={{
+                fontSize: "0.84rem",
+                color: THEME.textMuted,
+                marginTop: "2px",
+              }}
+            >
+              {subtitle}
+            </div>
+          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {headerRight}
-          {href ? (
-            <MiniHeaderIcon>
-              <ChevronRight size={12} strokeWidth={2.6} />
-            </MiniHeaderIcon>
-          ) : null}
-        </div>
+        <div style={{ marginTop: "10px" }}>{children}</div>
       </div>
-
-      <div style={{ padding: 12, position: "relative", zIndex: 1 }}>{children}</div>
     </section>
   );
 }
 
-function EmptyState({
-  icon,
-  title,
-  text,
-  actionLabel,
-  compact = false,
-  onAction,
-}: {
-  icon?: ReactNode;
-  title: string;
-  text: string;
-  actionLabel?: string;
-  compact?: boolean;
-  onAction?: () => void;
-}) {
-  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    onAction?.();
-  };
-
-  return (
-    <div
-      style={{
-        minHeight: compact ? 180 : 250,
-        borderRadius: 14,
-        border: THEME.borderSoft,
-        background: THEME.card,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        textAlign: "center",
-        padding: compact ? 20 : 28,
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: `
-            radial-gradient(circle at 50% 0%, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.05) 20%, rgba(59,130,246,0) 54%),
-            linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 40%)
-          `,
-        }}
-      />
-
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          maxWidth: 360,
-          display: "grid",
-          justifyItems: "center",
-        }}
-      >
-        {icon ? (
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: 16,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 14,
-              border: THEME.borderSoft,
-              background:
-                "linear-gradient(180deg, rgba(20,33,47,0.98) 0%, rgba(11,20,30,0.98) 100%)",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 24px rgba(0,0,0,0.16)",
-            }}
-          >
-            {icon}
-          </div>
-        ) : null}
-
-        <div
-          style={{
-            fontSize: compact ? 16 : 18,
-            fontWeight: 900,
-            lineHeight: 1.15,
-            marginBottom: 8,
-            letterSpacing: "-0.03em",
-          }}
-        >
-          {title}
-        </div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textMuted,
-            lineHeight: 1.55,
-            marginBottom: actionLabel ? 16 : 0,
-            maxWidth: 320,
-          }}
-        >
-          {text}
-        </div>
-
-        {actionLabel ? (
-          <button
-            type="button"
-            onClick={handleClick}
-            style={{
-              height: 38,
-              padding: "0 14px",
-              borderRadius: 10,
-              background:
-                "linear-gradient(180deg, rgba(24,39,56,0.98) 0%, rgba(11,20,30,0.98) 100%)",
-              border: THEME.borderSoft,
-              color: THEME.textSoft,
-              fontSize: 13,
-              fontWeight: 900,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 7,
-              cursor: "pointer",
-              boxShadow:
-                "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.14)",
-            }}
-          >
-            {actionLabel}
-            <ChevronRight size={13} strokeWidth={2.4} />
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function VehicleCard({ vehicle }: { vehicle: VehicleCardData }) {
-  const accent = getAccent(vehicle.accent);
-
-  return (
-    <div
-      style={{
-        minHeight: 108,
-        display: "grid",
-        gridTemplateColumns: "1fr 138px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-      <AccentLine color={accent.line} />
-
-      <div
-        style={{
-          minWidth: 0,
-          paddingLeft: 8,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 10,
-              color: THEME.textMuted,
-              marginBottom: 5,
-              fontWeight: 700,
-              letterSpacing: "0.03em",
-              textTransform: "uppercase",
-            }}
-          >
-            Vehicle
-          </div>
-
-          <div
-            style={{
-              fontSize: 17,
-              lineHeight: 1.03,
-              fontWeight: 900,
-              letterSpacing: "-0.03em",
-              marginBottom: 6,
-            }}
-          >
-            {vehicle.year} {vehicle.make} {vehicle.model}
-          </div>
-
-          <div
-            style={{
-              fontSize: 12,
-              color: THEME.textMuted,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            VIN: {vehicle.vin}
-          </div>
-        </div>
-
-        <VehicleStatusBadge text={vehicle.status} accent={vehicle.accent} />
-      </div>
-
-      <ImageThumb img={vehicle.img} />
-    </div>
-  );
-}
-
-function ApprovalCard({ job }: { job: ApprovalCardData }) {
-  return (
-    <div
-      style={{
-        minHeight: 118,
-        display: "grid",
-        gridTemplateColumns: "1fr 124px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        overflow: "hidden",
-        position: "relative",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-
-      <div
-        style={{
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: 1.04,
-              fontWeight: 900,
-              letterSpacing: "-0.03em",
-              marginBottom: 4,
-            }}
-          >
-            {job.vehicle}
-          </div>
-
-          <div
-            style={{
-              fontSize: 13,
-              color: THEME.textSoft,
-              marginBottom: 7,
-            }}
-          >
-            {job.concern}
-          </div>
-
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: 1,
-              fontWeight: 900,
-              letterSpacing: "-0.03em",
-              marginBottom: 8,
-            }}
-          >
-            Estimate: {job.estimate}
-          </div>
-        </div>
-
-        <ApprovalStatusBadge text={job.status} compact />
-      </div>
-
-      <ImageThumb img={job.img} />
-    </div>
-  );
-}
-
-function RepairCard({ repair }: { repair: RepairCardData }) {
-  const accent = getAccent(repair.accent);
-
-  return (
-    <div
-      style={{
-        minHeight: 102,
-        display: "grid",
-        gridTemplateColumns: "1fr 108px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-      <AccentLine color={accent.line} />
-
-      <div
-        style={{
-          minWidth: 0,
-          paddingLeft: 8,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            marginBottom: 4,
-          }}
-        >
-          {repair.title}
-        </div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textSoft,
-            marginBottom: 7,
-          }}
-        >
-          {repair.vehicle}
-        </div>
-
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 12,
-            color: THEME.textMuted,
-            fontWeight: 800,
-          }}
-        >
-          <Clock3 size={13} strokeWidth={2.2} />
-          Due: {repair.due}
-        </div>
-      </div>
-
-      <ImageThumb img={repair.img} />
-    </div>
-  );
-}
-
-function PartsCard({ part }: { part: PartCardData }) {
-  return (
-    <div
-      style={{
-        minHeight: 92,
-        display: "grid",
-        gridTemplateColumns: "74px 1fr",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-        position: "relative",
-      }}
-    >
-      <CardTexture />
-      <SmallImageThumb img={part.img} />
-
-      <div
-        style={{
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            marginBottom: 3,
-          }}
-        >
-          {part.name}
-        </div>
-
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textSoft,
-            marginBottom: 6,
-          }}
-        >
-          {part.vehicle}
-        </div>
-
-        <div
-          style={{
-            fontSize: 12,
-            color: THEME.textMuted,
-            fontWeight: 800,
-          }}
-        >
-          Due: {part.due}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InventoryRow({ item }: { item: InventoryItemData }) {
-  const tone = getAccent(item.accent);
-
-  return (
-    <div
-      style={{
-        minHeight: 86,
-        display: "grid",
-        gridTemplateColumns: "1fr auto",
-        gap: 10,
-        padding: 10,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-      }}
-    >
-      <CardTexture />
-      <AccentLine color={tone.line} />
-
-      <div
-        style={{
-          minWidth: 0,
-          paddingLeft: 8,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          gap: 6,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {item.name}
-        </div>
-
-        <div
-          style={{
-            fontSize: 12,
-            color: THEME.textMuted,
-            fontWeight: 800,
-          }}
-        >
-          In Stock: {item.stock}
-        </div>
-      </div>
-
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          display: "flex",
-          alignItems: "center",
-        }}
-      >
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            minHeight: 28,
-            padding: "0 10px",
-            borderRadius: 8,
-            background: tone.soft,
-            color: tone.color,
-            border: `1px solid ${tone.border}`,
-            fontSize: 12,
-            fontWeight: 900,
-            whiteSpace: "nowrap",
-            boxShadow: `0 0 14px ${tone.glow}`,
-          }}
-        >
-          Reorder at {item.threshold}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function TechRow({ tech }: { tech: TechCardData }) {
-  return (
-    <div
-      style={{
-        minHeight: 66,
-        display: "grid",
-        gridTemplateColumns: "58px 1fr 112px",
-        gap: 10,
-        padding: 8,
-        borderRadius: 14,
-        background: THEME.card,
-        border: THEME.borderSoft,
-        overflow: "hidden",
-        alignItems: "center",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
-        position: "relative",
-      }}
-    >
-      <CardTexture />
-
-      <img
-        src={tech.avatar}
-        alt=""
-        style={{
-          width: 50,
-          height: 50,
-          borderRadius: 999,
-          objectFit: "cover",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "#1B2B3B",
-          position: "relative",
-          zIndex: 1,
-        }}
-      />
-
-      <div style={{ minWidth: 0, position: "relative", zIndex: 1 }}>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 900,
-            marginBottom: 2,
-          }}
-        >
-          {tech.name}
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: THEME.textSoft,
-            marginBottom: 2,
-          }}
-        >
-          {tech.role}
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: THEME.textMuted,
-            fontWeight: 800,
-          }}
-        >
-          {tech.vehicle}
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: 12,
-          color: THEME.textSoft,
-          lineHeight: 1.35,
-          fontWeight: 800,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {tech.role}
-        <br />
-        {tech.vehicle}
-      </div>
-    </div>
-  );
-}
-
-function ProofFrame({
+function DashboardSection({
   title,
   subtitle,
-  img,
+  accent,
+  items,
+  emptyText,
+  onOpen,
 }: {
   title: string;
   subtitle: string;
-  img: string;
+  accent: Accent;
+  items: DashboardJobCard[];
+  emptyText: string;
+  onOpen: (id: string) => void;
+}) {
+  const accentMap: Record<Accent, string> = {
+    blue: THEME.blueLine,
+    orange: THEME.orangeLine,
+    emerald: THEME.emeraldLine,
+  };
+
+  return (
+    <section
+      style={{
+        background: THEME.card,
+        border: THEME.borderSoft,
+        borderRadius: "20px",
+        boxShadow: THEME.cardShadow,
+        overflow: "hidden",
+        position: "relative",
+        minHeight: 0,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: "0 auto 0 0",
+          width: "3px",
+          background: accentMap[accent],
+        }}
+      />
+
+      <div style={{ padding: "14px 14px 14px 16px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "10px",
+            alignItems: "flex-start",
+            marginBottom: "10px",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "0.98rem",
+                fontWeight: 800,
+                letterSpacing: "-0.03em",
+                color: THEME.text,
+              }}
+            >
+              {title}
+            </div>
+            <div
+              style={{
+                fontSize: "0.84rem",
+                color: THEME.textMuted,
+                marginTop: "2px",
+                lineHeight: 1.4,
+              }}
+            >
+              {subtitle}
+            </div>
+          </div>
+
+          <div
+            style={{
+              minWidth: 34,
+              height: 34,
+              borderRadius: 999,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background:
+                accent === "blue"
+                  ? THEME.blueSoft
+                  : accent === "orange"
+                  ? THEME.orangeSoft
+                  : THEME.emeraldSoft,
+              border: `1px solid ${accentMap[accent]}`,
+              color:
+                accent === "blue"
+                  ? THEME.blue
+                  : accent === "orange"
+                  ? THEME.orange
+                  : THEME.emerald,
+              fontWeight: 900,
+              fontSize: "0.84rem",
+              flexShrink: 0,
+            }}
+          >
+            {items.length}
+          </div>
+        </div>
+
+        {items.length === 0 ? (
+          <div
+            style={{
+              borderRadius: "14px",
+              border: `1px solid ${THEME.lineSoft}`,
+              background:
+                "linear-gradient(180deg, rgba(8,16,27,0.78) 0%, rgba(5,12,20,0.7) 100%)",
+              padding: "16px 14px",
+              color: THEME.textMuted,
+              fontSize: "0.9rem",
+              lineHeight: 1.45,
+              minHeight: 72,
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            {emptyText}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: "10px" }}>
+            {items.map((job) => (
+              <JobCard key={job.id} job={job} onOpen={() => onOpen(job.id)} />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function JobCard({
+  job,
+  onOpen,
+}: {
+  job: DashboardJobCard;
+  onOpen: () => void;
+}) {
+  const tone = getJobTone(job.status);
+  const colors = toneColor(tone);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        borderRadius: "16px",
+        border: `1px solid ${THEME.lineSoft}`,
+        background:
+          "linear-gradient(180deg, rgba(8,16,27,0.78) 0%, rgba(5,12,20,0.7) 100%)",
+        padding: "12px 12px",
+        cursor: "pointer",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "10px",
+          alignItems: "flex-start",
+          marginBottom: "10px",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "4px",
+            }}
+          >
+            <CarFront size={14} color={THEME.textSoft} />
+            <span
+              style={{
+                color: THEME.text,
+                fontSize: "0.94rem",
+                fontWeight: 800,
+                lineHeight: 1.25,
+                wordBreak: "break-word",
+              }}
+            >
+              {job.vehicleLabel}
+            </span>
+          </div>
+
+          <div
+            style={{
+              color: THEME.textMuted,
+              fontSize: "0.78rem",
+              fontWeight: 700,
+            }}
+          >
+            VIN: {job.vin}
+          </div>
+        </div>
+
+        <span
+          style={{
+            borderRadius: "999px",
+            padding: "7px 10px",
+            border: `1px solid ${colors.line}`,
+            background: colors.soft,
+            color: colors.text,
+            fontSize: "0.76rem",
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          {job.status}
+        </span>
+      </div>
+
+      <div
+        style={{
+          color: THEME.textSoft,
+          fontSize: "0.84rem",
+          lineHeight: 1.5,
+          marginBottom: "10px",
+        }}
+      >
+        {job.concern}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: "8px",
+          marginBottom: "10px",
+        }}
+      >
+        <MiniMeta label="Assigned" value={job.assignedTo} />
+        <MiniMeta label="Created" value={formatCreatedAt(job.createdAt)} />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "10px",
+          alignItems: "center",
+          color: THEME.textMuted,
+          fontSize: "0.78rem",
+          fontWeight: 700,
+        }}
+      >
+        <span>{getRelativeAge(job.updatedAt ?? job.createdAt)}</span>
+        <span style={{ color: "#78ABFF" }}>Open Job →</span>
+      </div>
+    </button>
+  );
+}
+
+function MiniMeta({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
 }) {
   return (
     <div
       style={{
-        minHeight: 204,
-        borderRadius: 14,
-        overflow: "hidden",
-        position: "relative",
-        border: THEME.borderSoft,
-        background: "#101D2A",
-        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
+        borderRadius: "12px",
+        border: `1px solid ${THEME.lineFaint}`,
+        background: "rgba(255,255,255,0.02)",
+        padding: "9px 10px",
       }}
     >
-      <img
-        src={img}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          filter: "contrast(1.05) saturate(0.95) brightness(0.9)",
-        }}
-      />
-
       <div
         style={{
-          position: "absolute",
-          inset: 0,
-          background: `
-            linear-gradient(180deg, rgba(7,14,22,0.12) 0%, rgba(7,14,22,0.06) 24%, rgba(7,14,22,0.26) 54%, rgba(7,14,22,0.46) 100%),
-            linear-gradient(90deg, rgba(8,15,24,0.36) 0%, rgba(8,15,24,0.06) 40%, rgba(8,15,24,0.18) 100%)
-          `,
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 13,
-          border: "1px solid rgba(255,255,255,0.04)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          left: 12,
-          top: 10,
-          zIndex: 1,
+          color: THEME.textMuted,
+          fontSize: "0.68rem",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          marginBottom: "3px",
         }}
       >
-        <div
-          style={{
-            fontSize: 15,
-            fontWeight: 900,
-            marginBottom: 4,
-            textShadow: "0 2px 10px rgba(0,0,0,0.3)",
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: THEME.textSoft,
-          }}
-        >
-          {subtitle}
-        </div>
+        {label}
+      </div>
+      <div
+        style={{
+          color: THEME.textSoft,
+          fontSize: "0.8rem",
+          fontWeight: 800,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {value}
       </div>
     </div>
   );
 }
 
-function AlertRow({
-  alert,
-  isLast,
+function SummaryTile({
+  label,
+  value,
 }: {
-  alert: AlertItem;
-  isLast: boolean;
-}) {
-  const toneColor = alert.tone === "warning" ? THEME.orange : THEME.red;
-  const toneSoft = alert.tone === "warning" ? THEME.orangeSoft : THEME.redSoft;
-
-  return (
-    <div
-      style={{
-        minHeight: 50,
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "0 12px",
-        borderBottom: isLast ? "none" : `1px solid ${THEME.lineSoft}`,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.01) 0%, rgba(255,255,255,0) 100%)",
-      }}
-    >
-      <span
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: 999,
-          background: toneSoft,
-          border: `1px solid ${toneColor}66`,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          boxShadow: `0 0 12px ${toneColor}20`,
-        }}
-      >
-        <Bell size={9} strokeWidth={2.5} color={toneColor} />
-      </span>
-
-      <span
-        style={{
-          fontSize: 13,
-          color: THEME.textSoft,
-          fontWeight: 800,
-          lineHeight: 1.35,
-          minWidth: 0,
-        }}
-      >
-        {alert.text}
-      </span>
-
-      <ChevronRight
-        size={16}
-        strokeWidth={2.3}
-        color={THEME.textDim}
-        style={{ marginLeft: "auto", flexShrink: 0 }}
-      />
-    </div>
-  );
-}
-
-function ImageThumb({ img }: { img: string }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        borderRadius: 12,
-        overflow: "hidden",
-        minHeight: 90,
-        border: "1px solid rgba(255,255,255,0.09)",
-        background: THEME.thumb,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.03), 0 10px 18px rgba(0,0,0,0.18)",
-      }}
-    >
-      <img
-        src={img}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          filter: "contrast(1.06) saturate(0.92) brightness(0.92)",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `
-            linear-gradient(90deg, rgba(12,21,31,0.42) 0%, rgba(12,21,31,0.08) 42%, rgba(12,21,31,0.28) 100%),
-            linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 36%)
-          `,
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 11,
-          border: "1px solid rgba(255,255,255,0.035)",
-          pointerEvents: "none",
-        }}
-      />
-    </div>
-  );
-}
-
-function SmallImageThumb({ img }: { img: string }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: 70,
-        minHeight: 70,
-        borderRadius: 12,
-        overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.09)",
-        background: THEME.thumb,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.03), 0 8px 16px rgba(0,0,0,0.16)",
-        zIndex: 1,
-      }}
-    >
-      <img
-        src={img}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          filter: "contrast(1.05) saturate(0.92) brightness(0.92)",
-        }}
-      />
-
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(13,24,36,0.16) 38%, rgba(13,24,36,0.3) 100%)",
-        }}
-      />
-    </div>
-  );
-}
-
-function PanelFooter({ onClick }: { onClick?: () => void }) {
-  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
-    onClick?.();
-  };
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        marginTop: 12,
-      }}
-    >
-      <button
-        type="button"
-        onClick={handleClick}
-        style={{
-          height: 34,
-          minWidth: 118,
-          borderRadius: 10,
-          background:
-            "linear-gradient(180deg, rgba(22,33,47,0.98) 0%, rgba(12,21,31,0.98) 100%)",
-          border: THEME.borderSoft,
-          color: THEME.textSoft,
-          fontSize: 12,
-          fontWeight: 800,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          cursor: "pointer",
-          boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 16px rgba(0,0,0,0.14)",
-        }}
-      >
-        View All
-        <ChevronRight size={13} strokeWidth={2.4} />
-      </button>
-    </div>
-  );
-}
-
-function VehicleStatusBadge({
-  text,
-  accent,
-}: {
-  text: string;
-  accent: Accent;
-}) {
-  const tone = getAccent(accent);
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        alignSelf: "flex-start",
-        maxWidth: "100%",
-        minHeight: 28,
-        padding: "0 10px",
-        borderRadius: 8,
-        background: tone.soft,
-        color: tone.color,
-        border: `1px solid ${tone.border}`,
-        fontSize: 12,
-        fontWeight: 900,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        lineHeight: 1,
-        boxShadow: `0 0 14px ${tone.glow}`,
-      }}
-      title={text}
-    >
-      {text}
-    </span>
-  );
-}
-
-function ApprovalStatusBadge({
-  text,
-  compact = false,
-}: {
-  text: ApprovalStatus;
-  compact?: boolean;
-}) {
-  const tone = getApprovalTone(text);
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        alignSelf: "flex-start",
-        maxWidth: "100%",
-        minHeight: compact ? 24 : 28,
-        padding: compact ? "0 8px" : "0 10px",
-        borderRadius: 8,
-        background: tone.soft,
-        color: tone.color,
-        border: `1px solid ${tone.border}`,
-        fontSize: compact ? 11 : 12,
-        fontWeight: 900,
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        lineHeight: 1,
-        boxShadow: `0 0 14px ${tone.glow}`,
-      }}
-      title={text}
-    >
-      {text}
-    </span>
-  );
-}
-
-function AccentLine({ color }: { color: string }) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 3,
-        background: color,
-        boxShadow: `0 0 12px ${color}`,
-      }}
-    />
-  );
-}
-
-function CardTexture() {
-  return (
-    <>
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: THEME.cardTop,
-          opacity: 0.95,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: 1,
-          borderRadius: 13,
-          pointerEvents: "none",
-          border: "1px solid rgba(255,255,255,0.03)",
-        }}
-      />
-    </>
-  );
-}
-
-function SquareActionButton({ children }: { children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        width: 40,
-        height: 40,
-        borderRadius: 10,
-        border: THEME.borderSoft,
-        background:
-          "linear-gradient(180deg, rgba(18,29,41,0.98) 0%, rgba(10,18,28,0.98) 100%)",
-        color: THEME.textSoft,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.14)",
-        flexShrink: 0,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function MiniHeaderIcon({ children }: { children: ReactNode }) {
-  return (
-    <span
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 8,
-        border: THEME.borderSoft,
-        background:
-          "linear-gradient(180deg, rgba(18,29,41,0.98) 0%, rgba(10,18,28,0.98) 100%)",
-        color: THEME.textSoft,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 16px rgba(0,0,0,0.12)",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function AvatarAction() {
-  return (
-    <button
-      type="button"
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        height: 40,
-        padding: "0 9px 0 7px",
-        borderRadius: 12,
-        border: THEME.borderSoft,
-        background:
-          "linear-gradient(180deg, rgba(18,29,41,0.98) 0%, rgba(10,18,28,0.98) 100%)",
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 7,
-        cursor: "pointer",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.14)",
-        flexShrink: 0,
-      }}
-    >
-      <img
-        src="/images/proof-platform.png"
-        alt=""
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: 999,
-          objectFit: "cover",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "#1B2B3B",
-        }}
-      />
-      <ChevronDown size={13} strokeWidth={2.4} color={THEME.textSoft} />
-    </button>
-  );
-}
-
-function getAccent(accent: Accent) {
-  if (accent === "orange") {
-    return {
-      color: THEME.orange,
-      soft: THEME.orangeSoft,
-      line: THEME.orangeLine,
-      border: "rgba(245,158,66,0.34)",
-      glow: "rgba(245,158,66,0.18)",
-    };
-  }
-
-  if (accent === "emerald") {
-    return {
-      color: THEME.emerald,
-      soft: THEME.emeraldSoft,
-      line: THEME.emeraldLine,
-      border: "rgba(39,217,191,0.34)",
-      glow: "rgba(39,217,191,0.18)",
-    };
-  }
-
-  return {
-    color: THEME.blue,
-    soft: THEME.blueSoft,
-    line: THEME.blueLine,
-    border: "rgba(59,130,246,0.34)",
-    glow: "rgba(59,130,246,0.18)",
-  };
-}
-
-function getApprovalTone(status: ApprovalStatus) {
-  if (status === "Approved") {
-    return {
-      color: THEME.emerald,
-      soft: THEME.emeraldSoft,
-      border: "rgba(39,217,191,0.34)",
-      glow: "rgba(39,217,191,0.18)",
-    };
-  }
-
-  if (status === "Repairing") {
-    return {
-      color: THEME.orange,
-      soft: THEME.orangeSoft,
-      border: "rgba(245,158,66,0.34)",
-      glow: "rgba(245,158,66,0.18)",
-    };
-  }
-
-  return {
-    color: THEME.orange,
-    soft: THEME.orangeSoft,
-    border: "rgba(245,158,66,0.34)",
-    glow: "rgba(245,158,66,0.18)",
-  };
-}
-
-function normalizeVehicleStatus(status: string | null): VehicleStatus | null {
-  if (status === "In Progress") return "In Progress";
-  if (status === "Waiting on Parts") return "Waiting on Parts";
-  if (status === "Ready for Pickup") return "Ready for Pickup";
-  if (status === "Diagnostics") return "Diagnostics";
-  return null;
-}
-
-function normalizeApprovalStatus(status: string | null): ApprovalStatus | null {
-  if (status === "Pending Approval") return "Pending Approval";
-  if (status === "Approved") return "Approved";
-  if (status === "Repairing") return "Repairing";
-  return null;
-}
-
-function formatVehicleLabel(vehicle: VehicleRow) {
-  return (
-    [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() ||
-    "Unknown Vehicle"
-  );
-}
-
-function formatDueText(createdAt: string | null) {
-  if (!createdAt) return "Recently created";
-
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return "Recently created";
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function getVehicleAccent(status: VehicleStatus): Accent {
-  if (status === "Waiting on Parts") return "orange";
-  if (status === "Ready for Pickup") return "emerald";
-  return "blue";
-}
-
-function getVehicleImage(status: VehicleStatus) {
-  if (status === "Waiting on Parts") return "/images/fleetproof-inspection.png";
-  if (status === "Ready for Pickup") return "/images/equipment-proof.jpg";
-  return "/images/driveproof-damage.jpg";
-}
-
-function getApprovalImage() {
-  return "/images/driveproof-damage.jpg";
-}
-
-function getRepairImage(status: VehicleStatus) {
-  if (status === "Waiting on Parts") return "/images/equipment-proof.jpg";
-  if (status === "Diagnostics") return "/images/fleetproof-inspection.png";
-  return "/images/driveproof-damage.jpg";
-}
-
-const primaryActionButton: CSSProperties = {
-  height: 40,
-  padding: "0 14px",
-  borderRadius: 10,
-  background: THEME.buttonBlue,
-  border: "1px solid rgba(59,130,246,0.34)",
-  color: "#F7FBFF",
-  fontSize: 13,
-  fontWeight: 900,
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 7,
-  cursor: "pointer",
-  boxShadow:
-    "inset 0 1px 0 rgba(255,255,255,0.12), 0 0 18px rgba(59,130,246,0.22), 0 10px 20px rgba(0,0,0,0.16)",
-  whiteSpace: "nowrap",
-  flexShrink: 0,
-};
+  label: string;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   AlertCircle,
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   FileText,
   LoaderCircle,
+  Plus,
   Save,
   Search,
   Shield,
@@ -19,6 +20,15 @@ import {
   Wrench,
 } from "lucide-react";
 
+type JobStatus =
+  | "New Intake"
+  | "Waiting on Approval"
+  | "Approved"
+  | "In Progress"
+  | "Waiting on Parts"
+  | "Ready for Pickup";
+
+type ApprovalStatus = "Not Sent" | "Pending" | "Approved";
 type Accent = "blue" | "orange" | "emerald";
 type StatusTone = "red" | "yellow" | "green";
 
@@ -42,8 +52,10 @@ type FormState = {
   concern: string;
   requestedWork: string;
   notes: string;
-  diagnosticFee: string;
-  writtenBy: string;
+  status: JobStatus;
+  approvalStatus: ApprovalStatus;
+  advisor: string;
+  technician: string;
 };
 
 type FieldState = {
@@ -61,50 +73,14 @@ type ReadinessItem = {
 
 type ShopRow = { id: string };
 type CustomerRow = { id: string };
-type VehicleRow = { id: string };
-type JobRow = { id: string };
-
-type VehicleDecode = {
-  year: string;
-  make: string;
-  model: string;
-};
-
-type LocalJobRecord = {
-  id: string;
-  status:
-    | "New Intake"
-    | "Waiting on Approval"
-    | "Approved"
-    | "In Progress"
-    | "Waiting on Parts"
-    | "Ready for Pickup"
-    | "Completed"
-    | "Declined";
-  assigned_to: string | null;
-  concern: string;
-  notes: string;
-  findings: string;
-  approval_state: "Not Requested" | "Pending" | "Approved" | "Declined";
-  created_at: string;
-  updated_at: string;
-  vehicles: {
-    year: string;
-    make: string;
-    model: string;
-    vin: string;
-    plate: string | null;
-    color: string | null;
-    customer_name: string;
-    customer_phone: string;
-  };
-};
+type TeamMemberRow = { id: string | null };
+type VehicleDecode = { year: string; make: string; model: string };
 
 const TEAM_MEMBERS: TeamMember[] = [
-  { id: "1", name: "Thomas", role: "Writer" },
-  { id: "2", name: "Mike", role: "Writer" },
-  { id: "3", name: "Chris", role: "Writer" },
-  { id: "4", name: "Front Desk", role: "Writer" },
+  { id: "1", name: "Thomas", role: "Service Advisor" },
+  { id: "2", name: "Mike", role: "Lead Technician" },
+  { id: "3", name: "Chris", role: "Technician" },
+  { id: "4", name: "Front Desk", role: "Advisor" },
 ];
 
 const THEME = {
@@ -159,12 +135,22 @@ const INITIAL_FORM: FormState = {
   concern: "",
   requestedWork: "",
   notes: "",
-  diagnosticFee: "135.00",
-  writtenBy: "Thomas",
+  status: "New Intake",
+  approvalStatus: "Not Sent",
+  advisor: "Thomas",
+  technician: "Unassigned",
 };
 
-const DRAFT_STORAGE_KEY = "shopproof-new-job-draft";
-const JOB_STORAGE_KEY = "shopproof_jobs";
+function getBrowserSupabaseClient(): SupabaseClient | null {
+  if (typeof window === "undefined") return null;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) return null;
+
+  return createClient(url, key);
+}
 
 export default function ShopProofNewPage() {
   const router = useRouter();
@@ -172,27 +158,16 @@ export default function ShopProofNewPage() {
   const [width, setWidth] = useState(1440);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [scanMessage, setScanMessage] = useState(
-    "Enter the VIN manually, then use Decode VIN to pull vehicle details."
+    "Enter the VIN manually, then use Decode VIN to pull vehicle details through ShopPROOF.",
   );
   const [isCreating, setIsCreating] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isDecodingVin, setIsDecodingVin] = useState(false);
-  const [lastDecodedVin, setLastDecodedVin] = useState("");
+  const [lastDecodedVin, setLastDecodedVin] = useState<string>("");
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
     onResize();
-
-    try {
-      const savedDraft = sessionStorage.getItem(DRAFT_STORAGE_KEY);
-      if (savedDraft) {
-        const parsed = JSON.parse(savedDraft);
-        setForm((prev) => ({ ...prev, ...parsed }));
-      }
-    } catch {
-      // ignore draft parse issues
-    }
-
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -201,33 +176,25 @@ export default function ShopProofNewPage() {
 
   const customerNameState = useMemo(
     () => evaluateCustomerName(form.customerName),
-    [form.customerName]
+    [form.customerName],
   );
   const addressState = useMemo(
     () => evaluateAddress(form.customerAddress),
-    [form.customerAddress]
+    [form.customerAddress],
   );
   const phoneState = useMemo(() => evaluatePhone(form.phone), [form.phone]);
   const vinState = useMemo(() => evaluateVin(form.vin), [form.vin]);
   const vehicleIdentityState = useMemo(
     () => evaluateVehicleIdentity(form.year, form.make, form.model),
-    [form.year, form.make, form.model]
+    [form.year, form.make, form.model],
   );
   const mileageState = useMemo(
     () => evaluateMileage(form.mileageIn),
-    [form.mileageIn]
+    [form.mileageIn],
   );
   const concernState = useMemo(
     () => evaluateConcern(form.concern),
-    [form.concern]
-  );
-  const diagnosticFeeState = useMemo(
-    () => evaluateDiagnosticFee(form.diagnosticFee),
-    [form.diagnosticFee]
-  );
-  const writtenByState = useMemo(
-    () => evaluateWrittenBy(form.writtenBy),
-    [form.writtenBy]
+    [form.concern],
   );
 
   const canDecodeVin = useMemo(() => isValidVin(form.vin), [form.vin]);
@@ -276,55 +243,37 @@ export default function ShopProofNewPage() {
         tone: concernState.tone,
         status: concernState.status,
       },
-      {
-        key: "fee",
-        label: "Diagnostic fee",
-        tone: diagnosticFeeState.tone,
-        status: diagnosticFeeState.status,
-      },
-      {
-        key: "writtenBy",
-        label: "Written by",
-        tone: writtenByState.tone,
-        status: writtenByState.status,
-      },
     ],
     [
-      customerNameState,
-      addressState,
-      phoneState,
-      vinState,
-      vehicleIdentityState,
-      mileageState,
-      concernState,
-      diagnosticFeeState,
-      writtenByState,
-    ]
+      addressState.status,
+      addressState.tone,
+      concernState.status,
+      concernState.tone,
+      customerNameState.status,
+      customerNameState.tone,
+      mileageState.status,
+      mileageState.tone,
+      phoneState.status,
+      phoneState.tone,
+      vehicleIdentityState.status,
+      vehicleIdentityState.tone,
+      vinState.status,
+      vinState.tone,
+    ],
   );
 
   const intakeProgress = useMemo(() => {
-    const toneScore: Record<StatusTone, number> = {
-      red: 0,
-      yellow: 0.5,
-      green: 1,
-    };
-
+    const toneScore = { red: 0, yellow: 0.5, green: 1 } as const;
     const total = readinessItems.reduce(
       (sum, item) => sum + toneScore[item.tone],
-      0
+      0,
     );
-
     return Math.round((total / readinessItems.length) * 100);
   }, [readinessItems]);
 
-  const readyCount = useMemo(
-    () => readinessItems.filter((item) => item.tone === "green").length,
-    [readinessItems]
-  );
-
   const isReadyToCreate = useMemo(
     () => readinessItems.every((item) => item.tone === "green"),
-    [readinessItems]
+    [readinessItems],
   );
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -342,22 +291,20 @@ export default function ShopProofNewPage() {
     if (!normalized) {
       setLastDecodedVin("");
       setScanMessage(
-        "Enter the VIN manually, then use Decode VIN to pull vehicle details."
+        "Enter the VIN manually, then use Decode VIN to pull vehicle details through ShopPROOF.",
       );
       return;
     }
 
     if (normalized !== lastDecodedVin) {
-      setScanMessage("VIN entered. Use Decode VIN to pull year, make, and model.");
+      setScanMessage(
+        "VIN entered. Use Decode VIN to pull year, make, and model.",
+      );
     }
   };
 
   const handleMileageChange = (value: string) => {
     updateField("mileageIn", formatMileage(value));
-  };
-
-  const handleDiagnosticFeeChange = (value: string) => {
-    updateField("diagnosticFee", formatMoneyInput(value));
   };
 
   const handleDecodeVin = async () => {
@@ -375,7 +322,7 @@ export default function ShopProofNewPage() {
     try {
       const decoded = await decodeVinViaAppRoute(
         cleanVin,
-        form.year.trim() || undefined
+        form.year.trim() || undefined,
       );
 
       setForm((prev) => ({
@@ -395,13 +342,14 @@ export default function ShopProofNewPage() {
       setScanMessage(
         identity
           ? `VIN decoded successfully. ${cleanVin} → ${identity}`
-          : "VIN confirmed. Decode returned limited data, so fill any missing vehicle details manually."
+          : `VIN confirmed. Decode returned limited data, so fill any missing vehicle details manually.`,
       );
     } catch (error) {
       console.error("VIN decode failed:", error);
       setLastDecodedVin("");
+
       setScanMessage(
-        "VIN is valid, but decode is unavailable right now. Enter year, make, and model manually if needed."
+        "VIN is valid, but decode is unavailable right now. Enter year, make, and model manually if needed.",
       );
     } finally {
       setIsDecodingVin(false);
@@ -412,14 +360,13 @@ export default function ShopProofNewPage() {
     const demoVin = "1FTFW1ET5JKD23466";
 
     setIsDecodingVin(true);
-    setSubmitError(null);
 
     setForm((prev) => ({
       ...prev,
-      customerName: prev.customerName || "Duke Goodall",
+      customerName: prev.customerName || "Thomas Dickson",
       customerAddress:
         prev.customerAddress || "123 Main Street, Bossier City, LA 71111",
-      phone: prev.phone || formatPhone("3189376468"),
+      phone: prev.phone || formatPhone("3182869339"),
       email: prev.email || "thomas@example.com",
       vin: demoVin,
       plate: "ATP-150",
@@ -427,7 +374,7 @@ export default function ShopProofNewPage() {
       concern: prev.concern || "Hard to fill gas tank",
       requestedWork: prev.requestedWork || "Inspect EVAP / fuel fill concern",
       notes: prev.notes || "Customer states pump keeps clicking off early.",
-      diagnosticFee: prev.diagnosticFee || "135.00",
+      technician: prev.technician === "Unassigned" ? "Mike" : prev.technician,
     }));
 
     try {
@@ -440,10 +387,13 @@ export default function ShopProofNewPage() {
       }));
       setLastDecodedVin(demoVin);
       setScanMessage(
-        `Demo VIN decoded: ${
-          [decoded.year, decoded.make, decoded.model].filter(Boolean).join(" ") ||
-          demoVin
-        }`
+        `Demo VIN decoded through ShopPROOF: ${[
+          decoded.year,
+          decoded.make,
+          decoded.model,
+        ]
+          .filter(Boolean)
+          .join(" ") || demoVin}`,
       );
     } catch {
       setForm((prev) => ({
@@ -454,7 +404,7 @@ export default function ShopProofNewPage() {
       }));
       setLastDecodedVin("");
       setScanMessage(
-        "Demo vehicle filled. Decode was unavailable, so fallback values were used."
+        "Demo vehicle filled. Decode was unavailable, so fallback values were used.",
       );
     } finally {
       setIsDecodingVin(false);
@@ -463,15 +413,14 @@ export default function ShopProofNewPage() {
 
   const handleSaveDraft = () => {
     try {
-      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form));
+      sessionStorage.setItem("shopproof-new-job-draft", JSON.stringify(form));
       setScanMessage("Draft saved locally in this browser session.");
-      setSubmitError(null);
     } catch {
       setScanMessage("Draft could not be saved locally on this device.");
     }
   };
 
-  const handleCreateJob = async () => {
+  async function handleCreateJob() {
     if (!isReadyToCreate) {
       setSubmitError("Finish all required intake items before creating the job.");
       return;
@@ -481,7 +430,11 @@ export default function ShopProofNewPage() {
     setSubmitError(null);
 
     try {
-      let shopId: string | null = null;
+      const supabase = getBrowserSupabaseClient();
+
+      if (!supabase) {
+        throw new Error("Supabase not available.");
+      }
 
       const { data: shops, error: shopError } = await supabase
         .from("shops")
@@ -490,22 +443,23 @@ export default function ShopProofNewPage() {
 
       if (shopError) throw shopError;
 
-      shopId = (shops as ShopRow[] | null)?.[0]?.id ?? null;
+      const shopId = (shops as ShopRow[] | null)?.[0]?.id;
+      if (!shopId) throw new Error("No shop record found.");
 
-      if (!shopId) {
-        const { data: newShop, error: createShopError } = await supabase
-          .from("shops")
-          .insert({
-            name: "Default Shop",
-          })
+      let assignedTo: string | null = null;
+
+      if (form.technician && form.technician !== "Unassigned") {
+        const { data: techRow, error: techError } = await supabase
+          .from("team_members")
           .select("id")
-          .single();
+          .eq("shop_id", shopId)
+          .eq("name", form.technician)
+          .eq("active", true)
+          .maybeSingle();
 
-        if (createShopError) throw createShopError;
-        shopId = newShop?.id ?? null;
+        if (techError) throw techError;
+        assignedTo = (techRow as TeamMemberRow | null)?.id ?? null;
       }
-
-      if (!shopId) throw new Error("Shop could not be created.");
 
       const normalizedPhone = form.phone.trim();
       const normalizedEmail = form.email.trim().toLowerCase();
@@ -571,9 +525,7 @@ export default function ShopProofNewPage() {
         customerId = customerRow?.id ?? null;
       }
 
-      if (!customerId) {
-        throw new Error("Customer could not be created or found.");
-      }
+      if (!customerId) throw new Error("Customer could not be created or found.");
 
       let vehicleId: string | null = null;
 
@@ -587,7 +539,7 @@ export default function ShopProofNewPage() {
           .maybeSingle();
 
         if (vehicleLookupError) throw vehicleLookupError;
-        vehicleId = (existingVehicle as VehicleRow | null)?.id ?? null;
+        vehicleId = existingVehicle?.id ?? null;
       }
 
       if (!vehicleId) {
@@ -609,64 +561,39 @@ export default function ShopProofNewPage() {
         vehicleId = vehicleRow?.id ?? null;
       }
 
-      if (!vehicleId) {
-        throw new Error("Vehicle was not created or found.");
-      }
+      if (!vehicleId) throw new Error("Vehicle was not created or found.");
 
       const jobNotes = [
         `Concern: ${form.concern.trim() || "N/A"}`,
         `Requested Work: ${form.requestedWork.trim() || "N/A"}`,
         `Internal Notes: ${form.notes.trim() || "N/A"}`,
         `Mileage In: ${form.mileageIn.trim() || "N/A"}`,
-        `Diagnostic Fee: ${form.diagnosticFee.trim() || "N/A"}`,
-        `Written By: ${form.writtenBy.trim() || "N/A"}`,
+        `Advisor: ${form.advisor.trim() || "N/A"}`,
+        `Technician: ${form.technician.trim() || "N/A"}`,
       ].join("\n");
 
-      const { data: insertedJob, error: jobError } = await supabase
-        .from("jobs")
-        .insert({
-          shop_id: shopId,
-          customer_id: customerId,
-          vehicle_id: vehicleId,
-          status: "New Intake",
-          approval_state: "Not Requested",
-          concern: form.concern.trim(),
-          notes: jobNotes,
-          findings: "",
-          assigned_to: null,
-        })
-        .select("id")
-        .single();
+      const { error: jobError } = await supabase.from("jobs").insert({
+        shop_id: shopId,
+        customer_id: customerId,
+        vehicle_id: vehicleId,
+        status: form.status,
+        approval_status: form.approvalStatus,
+        assigned_to: assignedTo,
+        notes: jobNotes,
+      });
 
       if (jobError) throw jobError;
 
-      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
-
-      if ((insertedJob as JobRow | null)?.id) {
-        router.push(`/shopproof/jobs/${insertedJob.id}`);
-        return;
-      }
-
-      throw new Error("Job was inserted but no job id was returned.");
+      router.push("/shopproof/dashboard");
     } catch (error) {
       console.error("Create job error:", error);
-
-      const detailedMessage = getReadableErrorMessage(error);
-
-      try {
-        const localJob = createLocalFallbackJob(form);
-        saveLocalJob(localJob);
-        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
-        setScanMessage("Supabase create failed. Local fallback record created.");
-        router.push(`/shopproof/jobs/${localJob.id}`);
-        return;
-      } catch {
-        setSubmitError(detailedMessage);
-      }
+      setSubmitError(
+        error instanceof Error ? error.message : "Failed to create job.",
+      );
     } finally {
       setIsCreating(false);
     }
-  };
+  }
 
   return (
     <main
@@ -737,7 +664,7 @@ export default function ShopProofNewPage() {
             minHeight: isMobile ? "auto" : 84,
             padding: isMobile ? "10px 10px 8px" : "15px 18px",
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "auto 1fr",
+            gridTemplateColumns: isMobile ? "1fr" : "auto 1fr auto",
             gap: isMobile ? 10 : 14,
             alignItems: "center",
             borderBottom: `1px solid ${THEME.lineFaint}`,
@@ -803,9 +730,35 @@ export default function ShopProofNewPage() {
               zIndex: 1,
             }}
           >
-            <TopStatusBox title="New Job" value="Intake" />
-            <TopStatusBox title={`${intakeProgress}%`} value="Ready" />
-            <TopStatusBox title={`${readyCount}/${readinessItems.length}`} value="Complete" />
+            <TopStatusBox title="New Job" value="Current Screen" />
+            <TopStatusBox title={`${intakeProgress}%`} value="Intake Ready" />
+            <TopStatusBox
+              title={isReadyToCreate ? "Ready" : "Review"}
+              value="Create Status"
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: isMobile ? "stretch" : "flex-end",
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            <button
+              type="button"
+              style={{
+                ...primaryButton,
+                width: isMobile ? "100%" : undefined,
+                opacity: isCreating ? 0.7 : 1,
+              }}
+              onClick={handleCreateJob}
+              disabled={isCreating}
+            >
+              <Plus size={15} />
+              {isCreating ? "Creating..." : "Create Job"}
+            </button>
           </div>
         </div>
 
@@ -844,7 +797,7 @@ export default function ShopProofNewPage() {
                     fontSize: "1.1rem",
                   }}
                 >
-                  New Intake
+                  New Job Intake
                 </div>
               </div>
 
@@ -852,6 +805,19 @@ export default function ShopProofNewPage() {
                 <button type="button" style={ghostButton} onClick={() => router.back()}>
                   <ArrowLeft size={15} />
                   Back
+                </button>
+                <button type="button" style={ghostButton} onClick={handleSaveDraft}>
+                  <Save size={15} />
+                  Save Draft
+                </button>
+                <button
+                  type="button"
+                  style={{ ...primaryButton, opacity: isCreating ? 0.7 : 1 }}
+                  onClick={handleCreateJob}
+                  disabled={isCreating}
+                >
+                  <Plus size={15} />
+                  {isCreating ? "Creating..." : "Create Job"}
                 </button>
               </div>
             </div>
@@ -932,7 +898,9 @@ export default function ShopProofNewPage() {
                             ...primaryButton,
                             opacity: canDecodeVin && !isDecodingVin ? 1 : 0.82,
                             cursor:
-                              canDecodeVin && !isDecodingVin ? "pointer" : "not-allowed",
+                              canDecodeVin && !isDecodingVin
+                                ? "pointer"
+                                : "not-allowed",
                           }}
                           onClick={handleDecodeVin}
                           disabled={!canDecodeVin || isDecodingVin}
@@ -971,6 +939,40 @@ export default function ShopProofNewPage() {
                     }}
                   >
                     {scanMessage}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      borderRadius: "12px",
+                      border: `1px solid ${THEME.lineFaint}`,
+                      background: "rgba(5,12,20,0.42)",
+                      padding: "10px 12px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.8rem",
+                        fontWeight: 800,
+                        color: THEME.textSoft,
+                        marginBottom: "4px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      Workflow
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.82rem",
+                        color: THEME.textMuted,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Enter the VIN manually, then use Decode VIN. If decode is unavailable,
+                      continue intake and enter year, make, and model manually. No scan
+                      dependency. No blocked workflow.
+                    </div>
                   </div>
 
                   <div style={{ ...twoColGrid(isMobile), marginTop: "12px" }}>
@@ -1020,34 +1022,16 @@ export default function ShopProofNewPage() {
                 <SectionCard
                   icon={<Wrench size={17} />}
                   title="Visit Info"
-                  subtitle="What brought the vehicle in and what the customer is authorizing"
+                  subtitle="What brought the vehicle in and what the customer is asking for"
                   accent="orange"
                 >
-                  <div style={twoColGrid(isMobile)}>
-                    <InputBlock
-                      label="Diagnostic Fee"
-                      value={form.diagnosticFee}
-                      onChange={handleDiagnosticFeeChange}
-                      placeholder="135.00"
-                      validation={diagnosticFeeState.hint}
-                    />
-                    <SelectBlock
-                      label="Written By"
-                      value={form.writtenBy}
-                      onChange={(value) => updateField("writtenBy", value)}
-                      options={TEAM_MEMBERS.map((member) => member.name)}
-                    />
-                  </div>
-
-                  <div style={{ marginTop: "12px" }}>
-                    <TextAreaBlock
-                      label="Primary Concern"
-                      value={form.concern}
-                      onChange={(value) => updateField("concern", value)}
-                      placeholder="Customer states..."
-                      validation={concernState.hint}
-                    />
-                  </div>
+                  <TextAreaBlock
+                    label="Primary Concern"
+                    value={form.concern}
+                    onChange={(value) => updateField("concern", value)}
+                    placeholder="Customer states..."
+                    validation={concernState.hint}
+                  />
 
                   <div style={{ marginTop: "12px" }}>
                     <TextAreaBlock
@@ -1069,9 +1053,58 @@ export default function ShopProofNewPage() {
                 </SectionCard>
 
                 <SectionCard
+                  icon={<CheckCircle2 size={17} />}
+                  title="Assignment"
+                  subtitle="Current intake state and internal shop assignment"
+                  accent="blue"
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                      gap: "12px",
+                    }}
+                  >
+                    <SelectBlock
+                      label="Job Status"
+                      value={form.status}
+                      onChange={(value) => updateField("status", value as JobStatus)}
+                      options={[
+                        "New Intake",
+                        "Waiting on Approval",
+                        "Approved",
+                        "In Progress",
+                        "Waiting on Parts",
+                        "Ready for Pickup",
+                      ]}
+                    />
+                    <SelectBlock
+                      label="Approval Status"
+                      value={form.approvalStatus}
+                      onChange={(value) =>
+                        updateField("approvalStatus", value as ApprovalStatus)
+                      }
+                      options={["Not Sent", "Pending", "Approved"]}
+                    />
+                    <SelectBlock
+                      label="Service Advisor"
+                      value={form.advisor}
+                      onChange={(value) => updateField("advisor", value)}
+                      options={TEAM_MEMBERS.map((member) => member.name)}
+                    />
+                    <SelectBlock
+                      label="Assigned Technician"
+                      value={form.technician}
+                      onChange={(value) => updateField("technician", value)}
+                      options={["Unassigned", ...TEAM_MEMBERS.map((member) => member.name)]}
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
                   icon={<Shield size={17} />}
                   title="Intake Readiness"
-                  subtitle="Progress, summary, and missing items in one review block"
+                  subtitle="Progress, summary, and missing items in one full-width review block"
                   accent="blue"
                 >
                   <div
@@ -1156,11 +1189,11 @@ export default function ShopProofNewPage() {
                     />
                     <SummaryTile label="VIN" value={form.vin || "Not entered"} />
                     <SummaryTile label="Mileage" value={form.mileageIn || "Not entered"} />
+                    <SummaryTile label="Advisor" value={form.advisor || "Not selected"} />
                     <SummaryTile
-                      label="Diagnostic Fee"
-                      value={form.diagnosticFee ? `$${form.diagnosticFee}` : "Not entered"}
+                      label="Technician"
+                      value={form.technician || "Unassigned"}
                     />
-                    <SummaryTile label="Written By" value={form.writtenBy || "Not selected"} />
                   </div>
 
                   <div
@@ -1183,7 +1216,6 @@ export default function ShopProofNewPage() {
                     <div style={{ display: "grid", gap: "8px" }}>
                       {readinessItems.map((item) => {
                         const colors = toneColor(item.tone);
-
                         return (
                           <div
                             key={item.key}
@@ -1292,7 +1324,7 @@ export default function ShopProofNewPage() {
                         marginTop: "3px",
                       }}
                     >
-                      Manual VIN entry, stable decode, clean intake, then create job.
+                      Manual VIN entry with stable server-side decode.
                     </div>
                   </div>
 
@@ -1316,6 +1348,7 @@ export default function ShopProofNewPage() {
                       onClick={handleCreateJob}
                       disabled={!isReadyToCreate || isCreating}
                     >
+                      <Plus size={15} />
                       {isCreating ? "Creating..." : "Create Job"}
                     </button>
                   </div>
@@ -1330,7 +1363,6 @@ export default function ShopProofNewPage() {
         .spin {
           animation: spin 1s linear infinite;
         }
-
         @keyframes spin {
           from {
             transform: rotate(0deg);
@@ -1402,7 +1434,7 @@ function SectionCard({
   accent: Accent;
   children: ReactNode;
 }) {
-  const accentMap: Record<Accent, string> = {
+  const accentMap = {
     blue: THEME.blueLine,
     orange: THEME.orangeLine,
     emerald: THEME.emeraldLine,
@@ -1587,7 +1619,6 @@ function SelectBlock({
             </option>
           ))}
         </select>
-
         <ChevronDown
           size={14}
           strokeWidth={2.4}
@@ -1647,84 +1678,6 @@ function SummaryTile({
       </div>
     </div>
   );
-}
-
-function createLocalFallbackJob(form: FormState): LocalJobRecord {
-  const now = new Date().toISOString();
-
-  return {
-    id: `local-${Date.now()}`,
-    status: "New Intake",
-    assigned_to: null,
-    concern: form.concern.trim(),
-    notes: [
-      `Concern: ${form.concern.trim() || "N/A"}`,
-      `Requested Work: ${form.requestedWork.trim() || "N/A"}`,
-      `Internal Notes: ${form.notes.trim() || "N/A"}`,
-      `Mileage In: ${form.mileageIn.trim() || "N/A"}`,
-      `Diagnostic Fee: ${form.diagnosticFee.trim() || "N/A"}`,
-      `Written By: ${form.writtenBy.trim() || "N/A"}`,
-    ].join("\n"),
-    findings: "",
-    approval_state: "Not Requested",
-    created_at: now,
-    updated_at: now,
-    vehicles: {
-      year: form.year.trim(),
-      make: form.make.trim(),
-      model: form.model.trim(),
-      vin: form.vin.trim(),
-      plate: form.plate.trim() || null,
-      color: null,
-      customer_name: form.customerName.trim(),
-      customer_phone: form.phone.trim(),
-    },
-  };
-}
-
-function saveLocalJob(job: LocalJobRecord) {
-  if (typeof window === "undefined") return;
-
-  const raw = window.localStorage.getItem(JOB_STORAGE_KEY);
-  const existing = raw ? JSON.parse(raw) : [];
-  const jobs = Array.isArray(existing) ? existing : [];
-
-  jobs.unshift(job);
-  window.localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(jobs));
-}
-
-function getReadableErrorMessage(error: unknown) {
-  if (!error) return "Failed to create job.";
-
-  if (typeof error === "string") return error;
-
-  if (error instanceof Error) {
-    return error.message || "Failed to create job.";
-  }
-
-  if (typeof error === "object") {
-    const candidate = error as {
-      message?: string;
-      error_description?: string;
-      details?: string;
-      hint?: string;
-      code?: string;
-    };
-
-    const parts = [
-      candidate.message,
-      candidate.error_description,
-      candidate.details,
-      candidate.hint,
-      candidate.code,
-    ].filter(Boolean);
-
-    if (parts.length) {
-      return parts.join(" | ");
-    }
-  }
-
-  return "Failed to create job.";
 }
 
 function twoColGrid(isMobile: boolean): CSSProperties {
@@ -1862,7 +1815,7 @@ function evaluateVin(value: string): FieldState {
 function evaluateVehicleIdentity(
   year: string,
   make: string,
-  model: string
+  model: string,
 ): FieldState {
   const count = [year, make, model].filter((item) => item.trim()).length;
 
@@ -1928,46 +1881,6 @@ function evaluateConcern(value: string): FieldState {
   };
 }
 
-function evaluateDiagnosticFee(value: string): FieldState {
-  const numeric = parseFloat(value.replace(/,/g, ""));
-
-  if (!value.trim()) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Diagnostic fee is required.",
-    };
-  }
-
-  if (Number.isNaN(numeric) || numeric <= 0) {
-    return {
-      tone: "yellow",
-      status: "Review",
-      hint: "Enter a valid diagnostic fee.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluateWrittenBy(value: string): FieldState {
-  if (!value.trim()) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Written by is required.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
 function formatPhone(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 10);
 
@@ -1980,14 +1893,6 @@ function formatMileage(value: string) {
   const digits = value.replace(/\D/g, "");
   if (!digits) return "";
   return Number(digits).toLocaleString("en-US");
-}
-
-function formatMoneyInput(value: string) {
-  const cleaned = value.replace(/[^\d.]/g, "");
-  const parts = cleaned.split(".");
-  const whole = parts[0] || "";
-  const decimal = parts[1] ? parts[1].slice(0, 2) : "";
-  return decimal ? `${whole}.${decimal}` : whole;
 }
 
 function digitsOnly(value: string) {
@@ -2008,7 +1913,7 @@ function isValidVin(value: string) {
 
 async function decodeVinViaAppRoute(
   vin: string,
-  modelYear?: string
+  modelYear?: string,
 ): Promise<VehicleDecode> {
   const cleanVin = normalizeVinStrict(vin);
 
