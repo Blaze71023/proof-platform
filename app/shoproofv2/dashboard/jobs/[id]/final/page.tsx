@@ -325,7 +325,7 @@ export default function ShopProofFinalPage() {
     try {
       setSaving(true);
       setErrorMessage("");
-      updateJob(job.id, payload);
+      updateJob(payload);
       setJob(payload);
       setFinalState(mergedFinal);
       setSaveMessage("Final page saved.");
