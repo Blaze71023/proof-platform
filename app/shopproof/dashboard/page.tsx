@@ -1,21 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   AlertCircle,
-  CarFront,
+  CheckCircle2,
+  ChevronRight,
   Clock3,
-  FileLock2,
   FileText,
-  Headset,
   LoaderCircle,
   Search,
   Shield,
+  Wrench,
 } from "lucide-react";
+
+type Accent = "blue" | "orange" | "emerald";
+type StatusTone = "blue" | "yellow" | "green" | "red";
 
 type ShopJobStatus =
   | "New Intake"
@@ -27,12 +29,9 @@ type ShopJobStatus =
   | "Completed"
   | "Declined";
 
-type Accent = "blue" | "orange" | "emerald";
-type StatusTone = "red" | "yellow" | "green" | "blue";
-
 type VehicleRow = {
   id?: string | null;
-  year?: string | number | null;
+  year?: number | string | null;
   make?: string | null;
   model?: string | null;
   vin?: string | null;
@@ -73,20 +72,27 @@ type DashboardJobCard = {
 
 const THEME = {
   pageBase:
-    "linear-gradient(180deg, #02060B 0%, #030912 18%, #03101B 46%, #020912 76%, #02060B 100%)",
+    "linear-gradient(180deg, #02060B 0%, #030912 16%, #03101B 42%, #020912 72%, #02060B 100%)",
   shell:
     "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(5,12,20,0.995) 42%, rgba(3,9,15,1) 100%)",
+  shellInner:
+    "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 16%, rgba(255,255,255,0) 36%)",
   panel:
     "linear-gradient(180deg, rgba(13,24,37,0.98) 0%, rgba(8,16,27,0.99) 48%, rgba(7,13,22,1) 100%)",
+  panelTop:
+    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.012) 24%, rgba(255,255,255,0) 56%)",
+  panelEdgeGlow:
+    "radial-gradient(circle at 50% 0%, rgba(70,130,255,0.08) 0%, rgba(70,130,255,0.03) 28%, rgba(70,130,255,0) 58%)",
   card:
     "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(14,27,42,0.98) 44%, rgba(10,20,33,1) 100%)",
-  cardSoft:
-    "linear-gradient(180deg, rgba(14,27,44,0.76) 0%, rgba(8,16,27,0.68) 100%)",
+  cardTop:
+    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.014) 26%, rgba(255,255,255,0) 58%)",
   text: "#F5FAFF",
   textSoft: "#D7E5F0",
   textMuted: "#9CB1C1",
-  lineSoft: "rgba(255,255,255,0.055)",
+  textDim: "#73889A",
   lineFaint: "rgba(255,255,255,0.032)",
+  lineSoft: "rgba(255,255,255,0.06)",
   border: "1px solid rgba(109, 142, 176, 0.24)",
   borderSoft: "1px solid rgba(255,255,255,0.085)",
   shellShadow: "0 34px 90px rgba(0,0,0,0.5)",
@@ -95,119 +101,99 @@ const THEME = {
   blue: "#3B82F6",
   blueSoft: "rgba(59,130,246,0.16)",
   blueLine: "rgba(59,130,246,0.84)",
-  orange: "#F59E42",
-  orangeSoft: "rgba(245,158,66,0.18)",
-  orangeLine: "rgba(245,158,66,0.84)",
   emerald: "#27D9BF",
   emeraldSoft: "rgba(39,217,191,0.18)",
   emeraldLine: "rgba(39,217,191,0.84)",
-  red: "#FF6B7A",
-  redSoft: "rgba(255,107,122,0.18)",
-  redLine: "rgba(255,107,122,0.84)",
-  yellow: "#F5C451",
-  yellowSoft: "rgba(245,196,81,0.18)",
-  yellowLine: "rgba(245,196,81,0.84)",
+  orange: "#F59E42",
+  orangeSoft: "rgba(245,158,66,0.18)",
+  orangeLine: "rgba(245,158,66,0.84)",
+  yellow: "#F6C454",
+  yellowSoft: "rgba(246,196,84,0.16)",
+  yellowLine: "rgba(246,196,84,0.84)",
+  red: "#FF8792",
+  redSoft: "rgba(255,135,146,0.16)",
+  redLine: "rgba(255,135,146,0.84)",
   buttonBlue:
     "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
 };
 
-function getBrowserSupabaseClient(): SupabaseClient | null {
+let browserSupabase: SupabaseClient | null = null;
+
+function getBrowserSupabaseClient() {
   if (typeof window === "undefined") return null;
 
+  if (browserSupabase) return browserSupabase;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !key) return null;
+  if (!url || !anon) return null;
 
-  return createClient(url, key);
+  browserSupabase = createClient(url, anon);
+  return browserSupabase;
 }
 
-function normalizeJobStatus(status: string | null | undefined): ShopJobStatus {
-  if (status === "New Intake") return "New Intake";
-  if (status === "Waiting on Approval") return "Waiting on Approval";
-  if (status === "Approved") return "Approved";
-  if (status === "In Progress") return "In Progress";
-  if (status === "Waiting on Parts") return "Waiting on Parts";
-  if (status === "Ready for Pickup") return "Ready for Pickup";
-  if (status === "Completed") return "Completed";
-  if (status === "Declined") return "Declined";
+function normalizeJobStatus(status?: string | null): ShopJobStatus {
+  const value = (status || "").trim().toLowerCase();
+
+  if (value === "waiting on approval") return "Waiting on Approval";
+  if (value === "approved") return "Approved";
+  if (value === "in progress") return "In Progress";
+  if (value === "waiting on parts") return "Waiting on Parts";
+  if (value === "ready for pickup") return "Ready for Pickup";
+  if (value === "completed") return "Completed";
+  if (value === "declined") return "Declined";
   return "New Intake";
 }
 
 function pickVehicle(job: JobRow): VehicleRow | null {
-  const source = job.vehicle ?? job.vehicles ?? null;
-  if (!source) return null;
-  return Array.isArray(source) ? source[0] ?? null : source;
+  const primary = Array.isArray(job.vehicle) ? job.vehicle[0] ?? null : job.vehicle ?? null;
+  const fallback = Array.isArray(job.vehicles) ? job.vehicles[0] ?? null : job.vehicles ?? null;
+  return primary || fallback || null;
 }
 
 function formatVehicleLabel(vehicle: VehicleRow | null) {
   if (!vehicle) return "Unknown Vehicle";
 
-  const label = [vehicle.year, vehicle.make, vehicle.model]
-    .filter(Boolean)
-    .map((value) => String(value).trim())
-    .join(" ")
-    .trim();
+  const year = `${vehicle.year ?? ""}`.trim();
+  const make = `${vehicle.make ?? ""}`.trim();
+  const model = `${vehicle.model ?? ""}`.trim();
 
-  return label || "Unknown Vehicle";
+  const parts = [year, make, model].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : "Unknown Vehicle";
 }
 
 function extractConcern(job: JobRow) {
-  if (job.concern?.trim()) return job.concern.trim();
+  const direct = `${job.concern ?? ""}`.trim();
+  if (direct) return direct;
 
-  if (job.notes?.trim()) {
-    const concernLine = job.notes
-      .split("\n")
-      .find((line) => line.toLowerCase().startsWith("concern:"));
+  const notes = `${job.notes ?? ""}`.trim();
+  if (notes) return notes;
 
-    if (concernLine) {
-      return concernLine.replace(/^concern:\s*/i, "").trim();
-    }
-
-    return job.notes.trim();
-  }
-
-  if (job.findings?.trim()) return job.findings.trim();
+  const findings = `${job.findings ?? ""}`.trim();
+  if (findings) return findings;
 
   return "No concern entered";
 }
 
-function formatCreatedAt(dateString: string | null | undefined) {
-  if (!dateString) return "No date";
+function formatDateLabel(value?: string | null) {
+  if (!value) return "No date";
 
-  const date = new Date(dateString);
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "No date";
 
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
-function getRelativeAge(dateString: string | null | undefined) {
-  if (!dateString) return "Unknown";
-
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-
-  const diffMs = Date.now() - date.getTime();
-  const minutes = Math.max(1, Math.floor(diffMs / 60000));
-
-  if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function getJobTone(status: ShopJobStatus): StatusTone {
-  if (status === "Ready for Pickup" || status === "Completed") return "green";
+function statusTone(status: ShopJobStatus): StatusTone {
+  if (status === "Completed" || status === "Ready for Pickup") return "green";
   if (status === "Waiting on Approval" || status === "Waiting on Parts") return "yellow";
   if (status === "Declined") return "red";
-  if (status === "Approved" || status === "In Progress") return "blue";
   return "blue";
 }
 
@@ -249,44 +235,6 @@ function getSectionAccent(title: string): Accent {
   return "blue";
 }
 
-const ghostButton: CSSProperties = {
-  height: 50,
-  borderRadius: 16,
-  border: THEME.borderSoft,
-  background:
-    "linear-gradient(180deg, rgba(18,31,47,0.92) 0%, rgba(11,21,33,0.94) 100%)",
-  color: THEME.text,
-  padding: "0 16px",
-  fontSize: "0.94rem",
-  fontWeight: 800,
-  letterSpacing: "-0.02em",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 9,
-  cursor: "pointer",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.18)",
-};
-
-const primaryButton: CSSProperties = {
-  height: 50,
-  borderRadius: 16,
-  border: "1px solid rgba(104, 164, 255, 0.72)",
-  background: THEME.buttonBlue,
-  color: "#F8FBFF",
-  padding: "0 20px",
-  fontSize: "0.96rem",
-  fontWeight: 900,
-  letterSpacing: "-0.02em",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 9,
-  cursor: "pointer",
-  boxShadow:
-    "0 14px 24px rgba(21,101,219,0.24), inset 0 1px 0 rgba(255,255,255,0.14)",
-};
-
 export default function ShopProofDashboardPage() {
   const router = useRouter();
 
@@ -301,18 +249,14 @@ export default function ShopProofDashboardPage() {
     const onResize = () => setWidth(window.innerWidth);
     onResize();
     window.addEventListener("resize", onResize);
-
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const isMobile = width < 820;
 
   const loadJobs = async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
     setError(null);
 
@@ -329,6 +273,7 @@ export default function ShopProofDashboardPage() {
             vehicle_id,
             status,
             approval_status,
+            approval_state,
             assigned_to,
             concern,
             notes,
@@ -342,6 +287,8 @@ export default function ShopProofDashboardPage() {
               model,
               vin,
               plate,
+              customer_name,
+              customer_phone,
               created_at
             )
           `)
@@ -464,18 +411,18 @@ export default function ShopProofDashboardPage() {
           ${THEME.pageBase}
         `,
         color: THEME.text,
-        padding: isMobile ? "8px" : "18px",
+        padding: isMobile ? "12px" : "18px",
       }}
     >
       <div
         style={{
-          maxWidth: "1360px",
+          maxWidth: 1380,
           margin: "0 auto",
+          borderRadius: 28,
+          overflow: "hidden",
           background: THEME.shell,
           border: THEME.border,
-          borderRadius: "30px",
           boxShadow: THEME.shellShadow,
-          overflow: "hidden",
           position: "relative",
         }}
       >
@@ -484,124 +431,112 @@ export default function ShopProofDashboardPage() {
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
-            background:
-              "radial-gradient(circle at 22% 0%, rgba(59,130,246,0.18), transparent 32%), radial-gradient(circle at 78% 0%, rgba(39,217,191,0.10), transparent 24%)",
+            background: `
+              ${THEME.shellInner},
+              radial-gradient(circle at 50% 0%, rgba(71,123,255,0.14) 0%, rgba(71,123,255,0.05) 20%, rgba(71,123,255,0) 44%),
+              repeating-linear-gradient(
+                135deg,
+                rgba(255,255,255,0.012) 0px,
+                rgba(255,255,255,0.012) 1px,
+                transparent 1px,
+                transparent 9px
+              )
+            `,
+            opacity: 0.95,
           }}
         />
 
         <div
           style={{
-            position: "absolute",
-            left: isMobile ? 12 : 22,
-            right: isMobile ? 12 : 22,
-            top: isMobile ? 56 : 64,
-            height: 2,
-            background:
-              "linear-gradient(90deg, rgba(59,130,246,0) 0%, rgba(59,130,246,0.38) 22%, rgba(59,130,246,0.72) 50%, rgba(59,130,246,0.38) 78%, rgba(59,130,246,0) 100%)",
-            boxShadow: "0 0 22px rgba(59,130,246,0.28)",
-            pointerEvents: "none",
-          }}
-        />
-
-        <div
-          style={{
-            minHeight: isMobile ? "auto" : 84,
-            padding: isMobile ? "10px 10px 8px" : "15px 18px",
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "auto 1fr auto",
-            gap: isMobile ? 10 : 12,
+            minHeight: 66,
+            padding: isMobile ? "0 14px" : "0 18px",
+            display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
+            gap: 14,
             borderBottom: `1px solid ${THEME.lineFaint}`,
             position: "relative",
-            background:
-              "linear-gradient(180deg, rgba(10,20,31,0.86) 0%, rgba(6,13,22,0.5) 100%)",
+            zIndex: 2,
           }}
         >
           <div
             style={{
-              display: "flex",
+              display: "inline-flex",
               alignItems: "center",
-              gap: isMobile ? 10 : 12,
-              minWidth: 0,
-              position: "relative",
-              zIndex: 1,
+              gap: 10,
             }}
           >
-            <div
+            <span
               style={{
-                width: isMobile ? 38 : 42,
-                height: isMobile ? 38 : 42,
-                borderRadius: 12,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: THEME.borderSoft,
+                minHeight: 30,
+                padding: "0 12px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "-0.01em",
+                color: THEME.text,
                 background:
-                  "linear-gradient(180deg, rgba(17,32,48,0.98) 0%, rgba(10,19,29,0.98) 100%)",
-                boxShadow:
-                  "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18)",
-                flexShrink: 0,
+                  "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(10,20,33,1) 100%)",
+                border: THEME.border,
+                boxShadow: "0 0 18px rgba(59,130,246,0.18)",
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
-              <Shield size={isMobile ? 20 : 22} strokeWidth={2.1} color={THEME.blue} />
-            </div>
+              ShopPROOF
+            </span>
 
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: isMobile ? 18 : 28,
-                  lineHeight: 1,
-                  fontWeight: 900,
-                  letterSpacing: "-0.04em",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span style={{ color: THEME.text }}>Shop</span>
-                <span style={{ color: "#78ABFF" }}>PROOF</span>
-              </div>
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  color: THEME.textMuted,
-                  marginTop: 5,
-                  fontWeight: 700,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Internal operations dashboard
-              </div>
-            </div>
+            <span
+              style={{
+                minHeight: 28,
+                padding: "0 12px",
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: THEME.textSoft,
+                background:
+                  "linear-gradient(180deg, rgba(14,24,36,0.88) 0%, rgba(9,17,27,0.95) 100%)",
+                border: THEME.borderSoft,
+              }}
+            >
+              Operational Dashboard
+            </span>
           </div>
 
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: THEME.textDim,
+              letterSpacing: "0.03em",
+              textTransform: "uppercase",
+            }}
+          >
+            Internal App
+          </div>
+        </div>
+
+        <div
+          style={{
+            position: "relative",
+            padding: isMobile ? "14px 10px 16px" : "16px",
+          }}
+        >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: isMobile
-                ? "repeat(2, minmax(0, 1fr))"
-                : "repeat(4, minmax(0, 1fr))",
-              gap: 8,
-              minWidth: 0,
-              position: "relative",
-              zIndex: 1,
-            }}
-          >
-            <TopStatusBox title={`${totalVisible}`} value="Visible Jobs" />
-            <TopStatusBox title={`${intakeNeeded.length}`} value="Intake Needed" />
-            <TopStatusBox title={`${inProgress.length}`} value="In Progress" />
-            <TopStatusBox title={`${completed.length}`} value="Completed" />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: isMobile ? "stretch" : "flex-end",
-              position: "relative",
-              zIndex: 1,
+              gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, minmax(0, 1fr)) auto auto",
               gap: "10px",
-              flexWrap: "wrap",
+              marginBottom: "14px",
             }}
           >
+            <TopStatusBox label="Visible Jobs" value={totalVisible} />
+            <TopStatusBox label="Intake Needed" value={intakeNeeded.length} />
+            <TopStatusBox label="In Progress" value={inProgress.length} />
+            <TopStatusBox label="Completed" value={completed.length} />
+
             <button
               type="button"
               style={{ ...ghostButton, width: isMobile ? "100%" : undefined }}
@@ -620,14 +555,7 @@ export default function ShopProofDashboardPage() {
               New Intake
             </button>
           </div>
-        </div>
 
-        <div
-          style={{
-            position: "relative",
-            padding: isMobile ? "14px 10px 16px" : "16px",
-          }}
-        >
           <div
             style={{
               background: THEME.panel,
@@ -733,9 +661,7 @@ export default function ShopProofDashboardPage() {
                 </SectionCard>
 
                 {!loading && !hasAnyJobs ? (
-                  <FirstRunCard
-                    onCreate={() => router.push("/shopproof/new")}
-                  />
+                  <FirstRunCard onCreate={() => router.push("/shopproof/new")} />
                 ) : null}
 
                 <div
@@ -797,55 +723,67 @@ export default function ShopProofDashboardPage() {
             transform: rotate(360deg);
           }
         }
+
+        input::placeholder {
+          color: ${THEME.textDim};
+        }
       `}</style>
     </main>
   );
 }
 
 function TopStatusBox({
-  title,
+  label,
   value,
 }: {
-  title: string;
-  value: string;
+  label: string;
+  value: number | string;
 }) {
   return (
     <div
       style={{
-        minHeight: "50px",
-        borderRadius: "14px",
-        border: `1px solid ${THEME.lineSoft}`,
-        background:
-          "linear-gradient(180deg, rgba(14,27,44,0.72) 0%, rgba(8,16,27,0.62) 100%)",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        padding: "0 12px",
+        minHeight: 92,
+        borderRadius: 18,
+        background: THEME.card,
+        border: THEME.borderSoft,
+        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
+        padding: "14px 14px 12px",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
-      <span
+      <CardTexture />
+      <div
         style={{
-          fontWeight: 900,
-          color: THEME.text,
-          fontSize: "0.92rem",
-          letterSpacing: "-0.03em",
+          position: "relative",
+          zIndex: 1,
+          display: "grid",
+          gap: 8,
         }}
       >
-        {title}
-      </span>
-      <span
-        style={{
-          color: THEME.textSoft,
-          fontSize: "0.8rem",
-          fontWeight: 700,
-          opacity: 0.92,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {value}
-      </span>
+        <div
+          style={{
+            fontSize: 11,
+            color: THEME.textDim,
+            fontWeight: 900,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: "1.8rem",
+            lineHeight: 1,
+            fontWeight: 950,
+            letterSpacing: "-0.06em",
+            color: THEME.text,
+          }}
+        >
+          {value}
+        </div>
+      </div>
     </div>
   );
 }
@@ -863,14 +801,27 @@ function SectionCard({
   accent: Accent;
   children: ReactNode;
 }) {
-  const accentMap: Record<Accent, string> = {
-    blue: THEME.blueLine,
-    orange: THEME.orangeLine,
-    emerald: THEME.emeraldLine,
-  };
+  const tone =
+    accent === "emerald"
+      ? {
+          line: THEME.emeraldLine,
+          soft: THEME.emeraldSoft,
+          text: THEME.emerald,
+        }
+      : accent === "orange"
+        ? {
+            line: THEME.orangeLine,
+            soft: THEME.orangeSoft,
+            text: THEME.orange,
+          }
+        : {
+            line: THEME.blueLine,
+            soft: THEME.blueSoft,
+            text: THEME.blue,
+          };
 
   return (
-    <section
+    <div
       style={{
         background: THEME.card,
         border: THEME.borderSoft,
@@ -880,32 +831,59 @@ function SectionCard({
         position: "relative",
       }}
     >
+      <CardTexture />
+
       <div
         style={{
           position: "absolute",
-          inset: "0 auto 0 0",
-          width: "3px",
-          background: accentMap[accent],
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          background: tone.line,
+          boxShadow: `0 0 14px ${tone.line}`,
         }}
       />
 
-      <div style={{ padding: "13px 14px 12px 16px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-          <div
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
+          padding: "14px",
+          display: "grid",
+          gap: "12px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            flexWrap: "wrap",
+          }}
+        >
+          <span
             style={{
-              color: THEME.textSoft,
-              marginTop: "2px",
-              flexShrink: 0,
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: tone.text,
+              background: tone.soft,
+              border: `1px solid ${tone.line}`,
+              boxShadow: `0 0 12px ${tone.soft}`,
             }}
           >
             {icon}
-          </div>
+          </span>
 
-          <div>
+          <div style={{ display: "grid", gap: 2 }}>
             <div
               style={{
                 fontSize: "1rem",
-                fontWeight: 800,
+                fontWeight: 900,
                 letterSpacing: "-0.03em",
                 color: THEME.text,
               }}
@@ -916,7 +894,7 @@ function SectionCard({
               style={{
                 fontSize: "0.84rem",
                 color: THEME.textMuted,
-                marginTop: "2px",
+                lineHeight: 1.5,
               }}
             >
               {subtitle}
@@ -924,9 +902,109 @@ function SectionCard({
           </div>
         </div>
 
-        <div style={{ marginTop: "10px" }}>{children}</div>
+        {children}
       </div>
-    </section>
+    </div>
+  );
+}
+
+function InputBlock({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label
+      style={{
+        display: "grid",
+        gap: "8px",
+      }}
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 900,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: THEME.textDim,
+        }}
+      >
+        {label}
+      </span>
+
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: "100%",
+          minHeight: 48,
+          borderRadius: 14,
+          padding: "0 14px",
+          background:
+            "linear-gradient(180deg, rgba(16,28,42,0.98) 0%, rgba(9,18,29,0.98) 100%)",
+          border: "1px solid rgba(109, 142, 176, 0.24)",
+          color: THEME.text,
+          fontSize: 14,
+          fontWeight: 700,
+          outline: "none",
+          boxShadow:
+            "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
+        }}
+      />
+    </label>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <div
+      style={{
+        minHeight: 78,
+        borderRadius: 14,
+        background: THEME.panel,
+        border: THEME.borderSoft,
+        boxShadow: THEME.cardShadow,
+        padding: "12px 12px 10px",
+        display: "grid",
+        gap: 6,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: THEME.textDim,
+          fontWeight: 900,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: "1.3rem",
+          lineHeight: 1,
+          fontWeight: 950,
+          letterSpacing: "-0.05em",
+          color: THEME.text,
+        }}
+      >
+        {value}
+      </div>
+    </div>
   );
 }
 
@@ -945,14 +1023,27 @@ function DashboardSection({
   emptyText: string;
   onOpen: (id: string) => void;
 }) {
-  const accentMap: Record<Accent, string> = {
-    blue: THEME.blueLine,
-    orange: THEME.orangeLine,
-    emerald: THEME.emeraldLine,
-  };
+  const tone =
+    accent === "emerald"
+      ? {
+          line: THEME.emeraldLine,
+          soft: THEME.emeraldSoft,
+          text: THEME.emerald,
+        }
+      : accent === "orange"
+        ? {
+            line: THEME.orangeLine,
+            soft: THEME.orangeSoft,
+            text: THEME.orange,
+          }
+        : {
+            line: THEME.blueLine,
+            soft: THEME.blueSoft,
+            text: THEME.blue,
+          };
 
   return (
-    <section
+    <div
       style={{
         background: THEME.card,
         border: THEME.borderSoft,
@@ -960,120 +1051,112 @@ function DashboardSection({
         boxShadow: THEME.cardShadow,
         overflow: "hidden",
         position: "relative",
-        minHeight: 0,
       }}
     >
+      <CardTexture />
+
       <div
         style={{
-          position: "absolute",
-          inset: "0 auto 0 0",
-          width: "3px",
-          background: accentMap[accent],
+          position: "relative",
+          zIndex: 1,
+          padding: "14px",
+          display: "grid",
+          gap: "12px",
         }}
-      />
-
-      <div style={{ padding: "14px 14px 14px 16px" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "10px",
-            alignItems: "flex-start",
-            marginBottom: "10px",
-          }}
-        >
-          <div>
+      >
+        <div style={{ display: "grid", gap: 6 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <div
               style={{
-                fontSize: "0.98rem",
-                fontWeight: 800,
+                fontSize: "1rem",
+                fontWeight: 900,
                 letterSpacing: "-0.03em",
                 color: THEME.text,
               }}
             >
               {title}
             </div>
-            <div
+
+            <span
               style={{
-                fontSize: "0.84rem",
-                color: THEME.textMuted,
-                marginTop: "2px",
-                lineHeight: 1.4,
+                minHeight: 24,
+                padding: "0 10px",
+                borderRadius: 999,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: tone.text,
+                background: tone.soft,
+                border: `1px solid ${tone.line}`,
               }}
             >
-              {subtitle}
-            </div>
+              {items.length}
+            </span>
           </div>
 
           <div
             style={{
-              minWidth: 34,
-              height: 34,
-              borderRadius: 999,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background:
-                accent === "blue"
-                  ? THEME.blueSoft
-                  : accent === "orange"
-                  ? THEME.orangeSoft
-                  : THEME.emeraldSoft,
-              border: `1px solid ${accentMap[accent]}`,
-              color:
-                accent === "blue"
-                  ? THEME.blue
-                  : accent === "orange"
-                  ? THEME.orange
-                  : THEME.emerald,
-              fontWeight: 900,
               fontSize: "0.84rem",
-              flexShrink: 0,
+              color: THEME.textMuted,
+              lineHeight: 1.5,
             }}
           >
-            {items.length}
+            {subtitle}
           </div>
         </div>
 
-        {items.length === 0 ? (
-          <div
-            style={{
-              borderRadius: "14px",
-              border: `1px solid ${THEME.lineSoft}`,
-              background:
-                "linear-gradient(180deg, rgba(8,16,27,0.78) 0%, rgba(5,12,20,0.7) 100%)",
-              padding: "16px 14px",
-              color: THEME.textMuted,
-              fontSize: "0.9rem",
-              lineHeight: 1.45,
-              minHeight: 72,
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            {emptyText}
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: "10px" }}>
-            {items.map((job) => (
-              <JobCard key={job.id} job={job} onOpen={() => onOpen(job.id)} />
-            ))}
-          </div>
-        )}
+        <div style={{ display: "grid", gap: 10 }}>
+          {items.length === 0 ? (
+            <div
+              style={{
+                minHeight: 144,
+                borderRadius: 16,
+                border: THEME.borderSoft,
+                background:
+                  "linear-gradient(180deg, rgba(16,28,42,0.72) 0%, rgba(10,18,29,0.88) 100%)",
+                display: "grid",
+                placeItems: "center",
+                padding: "18px",
+                textAlign: "center",
+                color: THEME.textDim,
+                fontSize: "0.9rem",
+                fontWeight: 700,
+                lineHeight: 1.6,
+              }}
+            >
+              {emptyText}
+            </div>
+          ) : (
+            items.map((item) => (
+              <JobCard key={item.id} item={item} onOpen={() => onOpen(item.id)} />
+            ))
+          )}
+        </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 function JobCard({
-  job,
+  item,
   onOpen,
 }: {
-  job: DashboardJobCard;
+  item: DashboardJobCard;
   onOpen: () => void;
 }) {
-  const tone = getJobTone(job.status);
-  const colors = toneColor(tone);
+  const tone = toneColor(statusTone(item.status));
 
   return (
     <button
@@ -1082,162 +1165,350 @@ function JobCard({
       style={{
         width: "100%",
         textAlign: "left",
-        borderRadius: "16px",
-        border: `1px solid ${THEME.lineSoft}`,
+        borderRadius: 16,
+        border: THEME.borderSoft,
         background:
-          "linear-gradient(180deg, rgba(8,16,27,0.78) 0%, rgba(5,12,20,0.7) 100%)",
-        padding: "12px 12px",
+          "linear-gradient(180deg, rgba(16,28,42,0.9) 0%, rgba(9,17,28,0.94) 100%)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.14)",
+        padding: "14px",
         cursor: "pointer",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
+        color: THEME.text,
+        display: "grid",
+        gap: 10,
       }}
     >
       <div
         style={{
           display: "flex",
+          alignItems: "start",
           justifyContent: "space-between",
-          gap: "10px",
-          alignItems: "flex-start",
-          marginBottom: "10px",
+          gap: 10,
         }}
       >
-        <div style={{ minWidth: 0 }}>
+        <div style={{ display: "grid", gap: 6 }}>
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginBottom: "4px",
+              fontSize: "1rem",
+              lineHeight: 1.1,
+              fontWeight: 900,
+              letterSpacing: "-0.04em",
             }}
           >
-            <CarFront size={14} color={THEME.textSoft} />
-            <span
-              style={{
-                color: THEME.text,
-                fontSize: "0.94rem",
-                fontWeight: 800,
-                lineHeight: 1.25,
-                wordBreak: "break-word",
-              }}
-            >
-              {job.vehicleLabel}
-            </span>
+            {item.vehicleLabel}
           </div>
 
           <div
             style={{
-              color: THEME.textMuted,
               fontSize: "0.78rem",
-              fontWeight: 700,
+              color: THEME.textDim,
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
             }}
           >
-            VIN: {job.vin}
+            {item.vin}
           </div>
         </div>
 
         <span
           style={{
-            borderRadius: "999px",
-            padding: "7px 10px",
-            border: `1px solid ${colors.line}`,
-            background: colors.soft,
-            color: colors.text,
-            fontSize: "0.76rem",
-            fontWeight: 800,
-            whiteSpace: "nowrap",
+            minHeight: 24,
+            padding: "0 10px",
+            borderRadius: 999,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            fontWeight: 900,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            color: tone.text,
+            background: tone.soft,
+            border: `1px solid ${tone.line}`,
             flexShrink: 0,
           }}
         >
-          {job.status}
+          {item.status}
         </span>
       </div>
 
       <div
         style={{
+          fontSize: "0.9rem",
+          lineHeight: 1.55,
           color: THEME.textSoft,
-          fontSize: "0.84rem",
-          lineHeight: 1.5,
-          marginBottom: "10px",
+          fontWeight: 700,
         }}
       >
-        {job.concern}
+        {item.concern}
       </div>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: "8px",
-          marginBottom: "10px",
-        }}
-      >
-        <MiniMeta label="Assigned" value={job.assignedTo} />
-        <MiniMeta label="Created" value={formatCreatedAt(job.createdAt)} />
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "10px",
+          gridTemplateColumns: "1fr auto",
+          gap: 10,
           alignItems: "center",
-          color: THEME.textMuted,
-          fontSize: "0.78rem",
-          fontWeight: 700,
         }}
       >
-        <span>{getRelativeAge(job.updatedAt ?? job.createdAt)}</span>
-        <span style={{ color: "#78ABFF" }}>Open Job →</span>
+        <div style={{ display: "grid", gap: 5 }}>
+          <div
+            style={{
+              fontSize: "0.78rem",
+              color: THEME.textMuted,
+              fontWeight: 800,
+            }}
+          >
+            Assigned: {item.assignedTo}
+          </div>
+          <div
+            style={{
+              fontSize: "0.76rem",
+              color: THEME.textDim,
+              fontWeight: 700,
+            }}
+          >
+            Updated {formatDateLabel(item.updatedAt || item.createdAt)}
+          </div>
+        </div>
+
+        <span
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: THEME.borderSoft,
+            background:
+              "linear-gradient(180deg, rgba(18,30,44,0.96) 0%, rgba(10,17,28,0.98) 100%)",
+            color: THEME.textSoft,
+          }}
+        >
+          <ChevronRight size={16} />
+        </span>
       </div>
     </button>
   );
 }
 
-function MiniMeta({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function FirstRunCard({ onCreate }: { onCreate: () => void }) {
   return (
     <div
       style={{
-        borderRadius: "12px",
-        border: `1px solid ${THEME.lineFaint}`,
-        background: "rgba(255,255,255,0.02)",
-        padding: "9px 10px",
+        background: THEME.card,
+        border: THEME.borderSoft,
+        borderRadius: "20px",
+        boxShadow: THEME.cardShadow,
+        overflow: "hidden",
+        position: "relative",
       }}
     >
+      <CardTexture />
       <div
         style={{
-          color: THEME.textMuted,
-          fontSize: "0.68rem",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          marginBottom: "3px",
+          position: "relative",
+          zIndex: 1,
+          padding: "18px",
+          display: "grid",
+          gap: 10,
+          justifyItems: "start",
         }}
       >
-        {label}
-      </div>
-      <div
-        style={{
-          color: THEME.textSoft,
-          fontSize: "0.8rem",
-          fontWeight: 800,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {value}
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 14,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: THEME.blue,
+            background: THEME.blueSoft,
+            border: `1px solid ${THEME.blueLine}`,
+          }}
+        >
+          <Shield size={18} />
+        </div>
+
+        <div
+          style={{
+            fontSize: "1.15rem",
+            fontWeight: 900,
+            letterSpacing: "-0.04em",
+            color: THEME.text,
+          }}
+        >
+          No jobs yet
+        </div>
+
+        <div
+          style={{
+            fontSize: "0.92rem",
+            lineHeight: 1.6,
+            color: THEME.textMuted,
+            maxWidth: 620,
+          }}
+        >
+          Create your first intake to start tracking shop work through ShopPROOF.
+        </div>
+
+        <button type="button" style={primaryButton} onClick={onCreate}>
+          New Intake
+        </button>
       </div>
     </div>
   );
 }
 
-function SummaryTile({
-  label,
-  value,
+function InternalFooter({ isMobile }: { isMobile: boolean }) {
+  return (
+    <div
+      style={{
+        background: THEME.card,
+        border: THEME.borderSoft,
+        borderRadius: "20px",
+        padding: isMobile ? "14px 12px" : "16px 18px",
+        boxShadow: THEME.cardShadow,
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.2fr) auto auto",
+        gap: "14px",
+        alignItems: "center",
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontSize: "1rem",
+            fontWeight: 900,
+            letterSpacing: "-0.03em",
+            color: THEME.text,
+          }}
+        >
+          ShopPROOF
+        </div>
+        <div
+          style={{
+            fontSize: "0.86rem",
+            color: THEME.textMuted,
+            marginTop: 4,
+            lineHeight: 1.55,
+          }}
+        >
+          Evidence-based repair workflow documentation for real-world shop operations.
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <FooterLink href="/terms">Terms</FooterLink>
+        <FooterLink href="/privacy">Privacy</FooterLink>
+        <FooterLink href="/support">Support</FooterLink>
+        <FooterLink href="/contact">Contact</FooterLink>
+      </div>
+
+      <div
+        style={{
+          fontSize: "0.8rem",
+          color: THEME.textDim,
+          fontWeight: 700,
+          textAlign: isMobile ? "left" : "right",
+        }}
+      >
+        © 2026 ZeroHour Systems
+      </div>
+    </div>
+  );
+}
+
+function FooterLink({
+  href,
+  children,
 }: {
-  label: string;
+  href: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      style={{
+        textDecoration: "none",
+        color: THEME.textSoft,
+        fontSize: "0.84rem",
+        fontWeight: 800,
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function CardTexture() {
+  return (
+    <>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background: THEME.cardTop,
+          opacity: 0.95,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 1,
+          borderRadius: 15,
+          pointerEvents: "none",
+          border: "1px solid rgba(255,255,255,0.03)",
+        }}
+      />
+    </>
+  );
+}
+
+const ghostButton: CSSProperties = {
+  height: 50,
+  borderRadius: 16,
+  border: THEME.borderSoft,
+  background:
+    "linear-gradient(180deg, rgba(18,31,47,0.92) 0%, rgba(11,21,33,0.94) 100%)",
+  color: THEME.text,
+  padding: "0 16px",
+  fontSize: "0.94rem",
+  fontWeight: 800,
+  letterSpacing: "-0.02em",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+  cursor: "pointer",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.18)",
+};
+
+const primaryButton: CSSProperties = {
+  height: 50,
+  borderRadius: 16,
+  border: "1px solid rgba(104, 164, 255, 0.72)",
+  background: THEME.buttonBlue,
+  color: "#F8FBFF",
+  padding: "0 20px",
+  fontSize: "0.96rem",
+  fontWeight: 900,
+  letterSpacing: "-0.02em",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+  cursor: "pointer",
+  boxShadow:
+    "0 14px 24px rgba(21,101,219,0.24), inset 0 1px 0 rgba(255,255,255,0.16)",
+};
