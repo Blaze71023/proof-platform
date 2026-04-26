@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 import {
   AlertCircle,
   ArrowLeft,
@@ -19,7 +19,6 @@ import {
   Wrench,
 } from "lucide-react";
 
-type Accent = "blue" | "orange" | "emerald";
 type StatusTone = "red" | "yellow" | "green";
 
 type TeamMember = {
@@ -57,12 +56,8 @@ type ReadinessItem = {
   label: string;
   tone: StatusTone;
   status: string;
+  detail?: string;
 };
-
-type ShopRow = { id: string };
-type CustomerRow = { id: string };
-type VehicleRow = { id: string };
-type JobRow = { id: string };
 
 type VehicleDecode = {
   year: string;
@@ -70,24 +65,28 @@ type VehicleDecode = {
   model: string;
 };
 
+type ShopRow = { id: string };
+type CustomerRow = { id: string; phone?: string | null };
+type VehicleRow = { id: string };
+type JobRow = { id: string };
+
 type LocalJobRecord = {
   id: string;
-  status:
-    | "New Intake"
-    | "Waiting on Approval"
-    | "Approved"
-    | "In Progress"
-    | "Waiting on Parts"
-    | "Ready for Pickup"
-    | "Completed"
-    | "Declined";
-  assigned_to: string | null;
+  shop_id: string | null;
+  customer_id: string | null;
+  vehicle_id: string | null;
+  status: "New Intake";
+  approval_state: "Not Requested";
   concern: string;
   notes: string;
   findings: string;
-  approval_state: "Not Requested" | "Pending" | "Approved" | "Declined";
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  customer_address: string;
   vehicles: {
     year: string;
     make: string;
@@ -97,6 +96,7 @@ type LocalJobRecord = {
     color: string | null;
     customer_name: string;
     customer_phone: string;
+    mileage_in: string | null;
   };
 };
 
@@ -106,44 +106,6 @@ const TEAM_MEMBERS: TeamMember[] = [
   { id: "3", name: "Chris", role: "Writer" },
   { id: "4", name: "Front Desk", role: "Writer" },
 ];
-
-const THEME = {
-  pageBase:
-    "linear-gradient(180deg, #02060B 0%, #030912 18%, #03101B 46%, #020912 76%, #02060B 100%)",
-  shell:
-    "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(5,12,20,0.995) 42%, rgba(3,9,15,1) 100%)",
-  panel:
-    "linear-gradient(180deg, rgba(13,24,37,0.98) 0%, rgba(8,16,27,0.99) 48%, rgba(7,13,22,1) 100%)",
-  card:
-    "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(14,27,42,0.98) 44%, rgba(10,20,33,1) 100%)",
-  text: "#F5FAFF",
-  textSoft: "#D7E5F0",
-  textMuted: "#9CB1C1",
-  lineSoft: "rgba(255,255,255,0.055)",
-  lineFaint: "rgba(255,255,255,0.032)",
-  border: "1px solid rgba(109, 142, 176, 0.24)",
-  borderSoft: "1px solid rgba(255,255,255,0.085)",
-  shellShadow: "0 34px 90px rgba(0,0,0,0.5)",
-  panelShadow: "0 18px 42px rgba(0,0,0,0.24)",
-  cardShadow: "0 10px 22px rgba(0,0,0,0.16)",
-  blue: "#3B82F6",
-  blueSoft: "rgba(59,130,246,0.16)",
-  blueLine: "rgba(59,130,246,0.84)",
-  orange: "#F59E42",
-  orangeSoft: "rgba(245,158,66,0.18)",
-  orangeLine: "rgba(245,158,66,0.84)",
-  emerald: "#27D9BF",
-  emeraldSoft: "rgba(39,217,191,0.18)",
-  emeraldLine: "rgba(39,217,191,0.84)",
-  red: "#FF6B7A",
-  redSoft: "rgba(255,107,122,0.18)",
-  redLine: "rgba(255,107,122,0.84)",
-  yellow: "#F5C451",
-  yellowSoft: "rgba(245,196,81,0.18)",
-  yellowLine: "rgba(245,196,81,0.84)",
-  buttonBlue:
-    "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
-};
 
 const INITIAL_FORM: FormState = {
   customerName: "",
@@ -166,18 +128,68 @@ const INITIAL_FORM: FormState = {
 const DRAFT_STORAGE_KEY = "shopproof-new-job-draft";
 const JOB_STORAGE_KEY = "shopproof_jobs";
 
+const THEME = {
+  page:
+    "linear-gradient(180deg, #dfe6ee 0%, #d7e0e9 18%, #ced8e3 44%, #cad4df 74%, #d1dbe5 100%)",
+  shell:
+    "linear-gradient(180deg, rgba(225,233,241,0.96) 0%, rgba(216,226,237,0.985) 48%, rgba(209,220,231,0.995) 100%)",
+  shellOverlay:
+    "linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.04) 22%, rgba(255,255,255,0) 48%)",
+  panel:
+    "linear-gradient(180deg, rgba(250,252,255,0.985) 0%, rgba(243,247,252,0.995) 54%, rgba(238,243,249,1) 100%)",
+  card:
+    "linear-gradient(180deg, rgba(247,250,254,0.98) 0%, rgba(239,245,251,1) 100%)",
+  input:
+    "linear-gradient(180deg, rgba(253,254,255,0.98) 0%, rgba(245,249,253,1) 100%)",
+  topbar:
+    "linear-gradient(180deg, rgba(234,240,247,0.92) 0%, rgba(223,232,242,0.88) 100%)",
+  statusBar:
+    "linear-gradient(180deg, rgba(21,34,51,0.98) 0%, rgba(16,26,41,0.995) 100%)",
+  text: "#132031",
+  textSoft: "#223347",
+  textMuted: "#61758a",
+  line: "rgba(28,47,67,0.11)",
+  lineStrong: "rgba(28,47,67,0.18)",
+  lineFaint: "rgba(28,47,67,0.07)",
+  shellBorder: "1px solid rgba(69, 94, 118, 0.20)",
+  panelBorder: "1px solid rgba(84, 108, 131, 0.17)",
+  cardBorder: "1px solid rgba(92, 116, 140, 0.14)",
+  inputBorder: "1px solid rgba(101, 126, 151, 0.18)",
+  shellShadow: "0 30px 80px rgba(27, 39, 54, 0.16)",
+  panelShadow: "0 16px 34px rgba(28, 42, 59, 0.09)",
+  cardShadow: "0 12px 24px rgba(27, 40, 56, 0.06)",
+  inputInset:
+    "inset 0 1px 0 rgba(255,255,255,0.78), inset 0 -1px 0 rgba(215,226,237,0.32)",
+  blue: "#2563eb",
+  blueStrong: "#1d4ed8",
+  blueSoft: "rgba(37,99,235,0.10)",
+  blueLine: "rgba(37,99,235,0.28)",
+  blueGlow: "rgba(37,99,235,0.18)",
+  emerald: "#059669",
+  emeraldSoft: "rgba(5,150,105,0.10)",
+  emeraldLine: "rgba(5,150,105,0.22)",
+  red: "#dc2626",
+  redSoft: "rgba(220,38,38,0.10)",
+  redLine: "rgba(220,38,38,0.22)",
+  yellow: "#ca8a04",
+  yellowSoft: "rgba(202,138,4,0.12)",
+  yellowLine: "rgba(202,138,4,0.22)",
+  buttonBlue:
+    "linear-gradient(180deg, rgba(37,99,235,1) 0%, rgba(29,78,216,1) 100%)",
+};
+
 export default function ShopProofNewPage() {
   const router = useRouter();
 
   const [width, setWidth] = useState(1440);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [scanMessage, setScanMessage] = useState(
-    "Enter the VIN manually, then use Decode VIN to pull vehicle details."
+    "Enter the VIN manually, then use Decode VIN to confirm the vehicle."
   );
-  const [isCreating, setIsCreating] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isDecodingVin, setIsDecodingVin] = useState(false);
   const [lastDecodedVin, setLastDecodedVin] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
@@ -186,11 +198,11 @@ export default function ShopProofNewPage() {
     try {
       const savedDraft = sessionStorage.getItem(DRAFT_STORAGE_KEY);
       if (savedDraft) {
-        const parsed = JSON.parse(savedDraft);
+        const parsed = JSON.parse(savedDraft) as Partial<FormState>;
         setForm((prev) => ({ ...prev, ...parsed }));
       }
     } catch {
-      // ignore draft parse issues
+      // ignore invalid saved drafts
     }
 
     window.addEventListener("resize", onResize);
@@ -230,6 +242,30 @@ export default function ShopProofNewPage() {
     [form.writtenBy]
   );
 
+  const photoSetupState = useMemo<FieldState>(() => {
+    if (!form.vin.trim() || !form.customerName.trim()) {
+      return {
+        tone: "red",
+        status: "Condition-photo setup locked",
+        hint: "Finish the customer and vehicle identity first so intake photos are tied to the right record.",
+      };
+    }
+
+    if (!form.mileageIn.trim()) {
+      return {
+        tone: "yellow",
+        status: "Photo setup nearly ready",
+        hint: "Add mileage in before moving to the condition photo step.",
+      };
+    }
+
+    return {
+      tone: "green",
+      status: "Condition-photo step ready",
+      hint: "After saving intake, the next stage is the required drop-off photo set.",
+    };
+  }, [form.customerName, form.vin, form.mileageIn]);
+
   const canDecodeVin = useMemo(() => isValidVin(form.vin), [form.vin]);
 
   const readinessItems = useMemo<ReadinessItem[]>(
@@ -239,54 +275,70 @@ export default function ShopProofNewPage() {
         label: "Customer name",
         tone: customerNameState.tone,
         status: customerNameState.status,
+        detail: customerNameState.hint,
       },
       {
         key: "address",
         label: "Customer address",
         tone: addressState.tone,
         status: addressState.status,
+        detail: addressState.hint,
       },
       {
         key: "phone",
         label: "Phone number",
         tone: phoneState.tone,
         status: phoneState.status,
+        detail: phoneState.hint,
       },
       {
         key: "vin",
         label: "VIN",
         tone: vinState.tone,
         status: vinState.status,
+        detail: vinState.hint,
       },
       {
         key: "vehicle",
         label: "Year / Make / Model",
         tone: vehicleIdentityState.tone,
         status: vehicleIdentityState.status,
+        detail: vehicleIdentityState.hint,
       },
       {
         key: "mileage",
         label: "Mileage in",
         tone: mileageState.tone,
         status: mileageState.status,
+        detail: mileageState.hint,
       },
       {
         key: "concern",
         label: "Concern",
         tone: concernState.tone,
         status: concernState.status,
+        detail: concernState.hint,
       },
       {
         key: "fee",
         label: "Diagnostic fee",
         tone: diagnosticFeeState.tone,
         status: diagnosticFeeState.status,
+        detail: diagnosticFeeState.hint,
       },
       {
         key: "writtenBy",
         label: "Written by",
         tone: writtenByState.tone,
         status: writtenByState.status,
+        detail: writtenByState.hint,
+      },
+      {
+        key: "photoSetup",
+        label: "Condition photo step",
+        tone: photoSetupState.tone,
+        status: photoSetupState.status,
+        detail: photoSetupState.hint,
       },
     ],
     [
@@ -299,21 +351,18 @@ export default function ShopProofNewPage() {
       concernState,
       diagnosticFeeState,
       writtenByState,
+      photoSetupState,
     ]
   );
 
-  const intakeProgress = useMemo(() => {
-    const toneScore: Record<StatusTone, number> = {
+  const readinessPercent = useMemo(() => {
+    const scoreMap: Record<StatusTone, number> = {
       red: 0,
       yellow: 0.5,
       green: 1,
     };
 
-    const total = readinessItems.reduce(
-      (sum, item) => sum + toneScore[item.tone],
-      0
-    );
-
+    const total = readinessItems.reduce((sum, item) => sum + scoreMap[item.tone], 0);
     return Math.round((total / readinessItems.length) * 100);
   }, [readinessItems]);
 
@@ -322,10 +371,31 @@ export default function ShopProofNewPage() {
     [readinessItems]
   );
 
-  const isReadyToCreate = useMemo(
-    () => readinessItems.every((item) => item.tone === "green"),
-    [readinessItems]
-  );
+  const isReadyToCreate = useMemo(() => {
+    const requiredChecks = [
+      customerNameState,
+      addressState,
+      phoneState,
+      vinState,
+      vehicleIdentityState,
+      mileageState,
+      concernState,
+      diagnosticFeeState,
+      writtenByState,
+    ];
+
+    return requiredChecks.every((item) => item.tone === "green");
+  }, [
+    customerNameState,
+    addressState,
+    phoneState,
+    vinState,
+    vehicleIdentityState,
+    mileageState,
+    concernState,
+    diagnosticFeeState,
+    writtenByState,
+  ]);
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -341,9 +411,7 @@ export default function ShopProofNewPage() {
 
     if (!normalized) {
       setLastDecodedVin("");
-      setScanMessage(
-        "Enter the VIN manually, then use Decode VIN to pull vehicle details."
-      );
+      setScanMessage("Enter the VIN manually, then use Decode VIN to confirm the vehicle.");
       return;
     }
 
@@ -360,6 +428,16 @@ export default function ShopProofNewPage() {
     updateField("diagnosticFee", formatMoneyInput(value));
   };
 
+  const handleSaveDraft = () => {
+    try {
+      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form));
+      setSubmitError(null);
+      setScanMessage("Draft saved locally in this browser session.");
+    } catch {
+      setScanMessage("Draft could not be saved locally on this device.");
+    }
+  };
+
   const handleDecodeVin = async () => {
     const cleanVin = normalizeVinStrict(form.vin);
 
@@ -373,10 +451,7 @@ export default function ShopProofNewPage() {
     setScanMessage(`Decoding VIN ${cleanVin}...`);
 
     try {
-      const decoded = await decodeVinViaAppRoute(
-        cleanVin,
-        form.year.trim() || undefined
-      );
+      const decoded = await decodeVinViaAppRoute(cleanVin, form.year.trim() || undefined);
 
       setForm((prev) => ({
         ...prev,
@@ -388,9 +463,7 @@ export default function ShopProofNewPage() {
 
       setLastDecodedVin(cleanVin);
 
-      const identity = [decoded.year, decoded.make, decoded.model]
-        .filter(Boolean)
-        .join(" ");
+      const identity = [decoded.year, decoded.make, decoded.model].filter(Boolean).join(" ");
 
       setScanMessage(
         identity
@@ -408,116 +481,87 @@ export default function ShopProofNewPage() {
     }
   };
 
-  const handlePrefillDemo = async () => {
-    const demoVin = "1FTFW1ET5JKD23466";
-
-    setIsDecodingVin(true);
-    setSubmitError(null);
-
-    setForm((prev) => ({
-      ...prev,
-      customerName: prev.customerName || "Duke Goodall",
-      customerAddress:
-        prev.customerAddress || "123 Main Street, Bossier City, LA 71111",
-      phone: prev.phone || formatPhone("3189376468"),
-      email: prev.email || "thomas@example.com",
-      vin: demoVin,
-      plate: "ATP-150",
-      mileageIn: prev.mileageIn || "132,884",
-      concern: prev.concern || "Hard to fill gas tank",
-      requestedWork: prev.requestedWork || "Inspect EVAP / fuel fill concern",
-      notes: prev.notes || "Customer states pump keeps clicking off early.",
-      diagnosticFee: prev.diagnosticFee || "135.00",
-    }));
-
-    try {
-      const decoded = await decodeVinViaAppRoute(demoVin);
-      setForm((prev) => ({
-        ...prev,
-        year: decoded.year || prev.year,
-        make: decoded.make || prev.make,
-        model: decoded.model || prev.model,
-      }));
-      setLastDecodedVin(demoVin);
-      setScanMessage(
-        `Demo VIN decoded: ${
-          [decoded.year, decoded.make, decoded.model].filter(Boolean).join(" ") ||
-          demoVin
-        }`
-      );
-    } catch {
-      setForm((prev) => ({
-        ...prev,
-        year: prev.year || "2018",
-        make: prev.make || "Ford",
-        model: prev.model || "F-150",
-      }));
-      setLastDecodedVin("");
-      setScanMessage(
-        "Demo vehicle filled. Decode was unavailable, so fallback values were used."
-      );
-    } finally {
-      setIsDecodingVin(false);
-    }
-  };
-
-  const handleSaveDraft = () => {
-    try {
-      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form));
-      setScanMessage("Draft saved locally in this browser session.");
-      setSubmitError(null);
-    } catch {
-      setScanMessage("Draft could not be saved locally on this device.");
-    }
-  };
-
-  const handleCreateJob = async () => {
+  const handleCreateIntake = async () => {
     if (!isReadyToCreate) {
-      setSubmitError("Finish all required intake items before creating the job.");
+      setSubmitError("Finish the required intake items before creating the intake record.");
       return;
     }
 
     setIsCreating(true);
     setSubmitError(null);
 
+    const supabase = getSupabaseClient();
+
+    const fallbackToLocal = (message?: string) => {
+      try {
+        const localJob = createLocalFallbackJob(form);
+        saveLocalJob(localJob);
+        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+        setScanMessage("Supabase create failed. Local fallback intake record created.");
+        if (message) {
+          setSubmitError(message);
+        }
+        router.push(`/shopproof/jobs/${localJob.id}`);
+      } catch {
+        setSubmitError(message || "Failed to create intake record.");
+      }
+    };
+
+    if (!supabase) {
+      fallbackToLocal("Supabase not configured.");
+      setIsCreating(false);
+      return;
+    }
+
     try {
       let shopId: string | null = null;
 
-      const { data: shops, error: shopError } = await supabase
+      const { data: shops, error: shopLookupError } = await supabase
         .from("shops")
         .select("id")
         .limit(1);
 
-      if (shopError) throw shopError;
-
+      if (shopLookupError) throw shopLookupError;
       shopId = (shops as ShopRow[] | null)?.[0]?.id ?? null;
 
       if (!shopId) {
         const { data: newShop, error: createShopError } = await supabase
           .from("shops")
-          .insert({
-            name: "Default Shop",
-          })
+          .insert({ name: "Default Shop" })
           .select("id")
           .single();
 
         if (createShopError) throw createShopError;
-        shopId = newShop?.id ?? null;
+        shopId = (newShop as ShopRow | null)?.id ?? null;
       }
 
-      if (!shopId) throw new Error("Shop could not be created.");
+      if (!shopId) {
+        throw new Error("Shop could not be created.");
+      }
 
-      const normalizedPhone = form.phone.trim();
-      const normalizedEmail = form.email.trim().toLowerCase();
       const normalizedName = form.customerName.trim();
       const normalizedAddress = form.customerAddress.trim();
+      const normalizedPhone = form.phone.trim();
+      const normalizedPhoneDigits = normalizedPhone.replace(/\D/g, "");
+      const normalizedEmail = form.email.trim().toLowerCase();
+      const normalizedVin = form.vin.trim().toUpperCase();
+      const normalizedYear = form.year.trim();
+      const normalizedMake = form.make.trim();
+      const normalizedModel = form.model.trim();
+      const normalizedPlate = form.plate.trim().toUpperCase();
+      const normalizedConcern = form.concern.trim();
+      const normalizedRequestedWork = form.requestedWork.trim();
+      const normalizedMileage = form.mileageIn.trim();
+      const normalizedFee = form.diagnosticFee.trim();
+      const normalizedWrittenBy = form.writtenBy.trim();
+      const normalizedNotes = form.notes.trim();
 
       let customerId: string | null = null;
 
       if (normalizedPhone) {
         const { data: phoneMatch, error: phoneLookupError } = await supabase
           .from("customers")
-          .select("id")
+          .select("id, phone")
           .eq("shop_id", shopId)
           .eq("phone", normalizedPhone)
           .limit(1)
@@ -525,6 +569,21 @@ export default function ShopProofNewPage() {
 
         if (phoneLookupError) throw phoneLookupError;
         customerId = (phoneMatch as CustomerRow | null)?.id ?? null;
+      }
+
+      if (!customerId && normalizedPhoneDigits.length === 10) {
+        const phoneFormats = Array.from(
+          new Set([normalizedPhoneDigits, formatPhone(normalizedPhoneDigits), normalizedPhone])
+        );
+
+        const { data: phoneMatches, error: phoneMatchesError } = await supabase
+          .from("customers")
+          .select("id, phone")
+          .eq("shop_id", shopId)
+          .in("phone", phoneFormats);
+
+        if (phoneMatchesError) throw phoneMatchesError;
+        customerId = (phoneMatches as CustomerRow[] | null)?.[0]?.id ?? null;
       }
 
       if (!customerId && normalizedEmail) {
@@ -555,7 +614,7 @@ export default function ShopProofNewPage() {
       }
 
       if (!customerId) {
-        const { data: customerRow, error: customerError } = await supabase
+        const { data: customerRow, error: customerCreateError } = await supabase
           .from("customers")
           .insert({
             shop_id: shopId,
@@ -567,8 +626,20 @@ export default function ShopProofNewPage() {
           .select("id")
           .single();
 
-        if (customerError) throw customerError;
-        customerId = customerRow?.id ?? null;
+        if (customerCreateError) throw customerCreateError;
+        customerId = (customerRow as CustomerRow | null)?.id ?? null;
+      } else {
+        const { error: customerUpdateError } = await supabase
+          .from("customers")
+          .update({
+            name: normalizedName,
+            phone: normalizedPhone,
+            email: normalizedEmail || null,
+            address: normalizedAddress,
+          })
+          .eq("id", customerId);
+
+        if (customerUpdateError) throw customerUpdateError;
       }
 
       if (!customerId) {
@@ -577,12 +648,12 @@ export default function ShopProofNewPage() {
 
       let vehicleId: string | null = null;
 
-      if (form.vin.trim()) {
+      if (normalizedVin) {
         const { data: existingVehicle, error: vehicleLookupError } = await supabase
           .from("vehicles")
           .select("id")
           .eq("shop_id", shopId)
-          .eq("vin", form.vin.trim())
+          .eq("vin", normalizedVin)
           .limit(1)
           .maybeSingle();
 
@@ -591,35 +662,55 @@ export default function ShopProofNewPage() {
       }
 
       if (!vehicleId) {
-        const { data: vehicleRow, error: vehicleError } = await supabase
+        const { data: vehicleRow, error: vehicleCreateError } = await supabase
           .from("vehicles")
           .insert({
             shop_id: shopId,
             customer_id: customerId,
-            year: form.year.trim(),
-            make: form.make.trim(),
-            model: form.model.trim(),
-            vin: form.vin.trim(),
-            plate: form.plate.trim() || null,
+            year: normalizedYear,
+            make: normalizedMake,
+            model: normalizedModel,
+            vin: normalizedVin,
+            plate: normalizedPlate || null,
           })
           .select("id")
           .single();
 
-        if (vehicleError) throw vehicleError;
-        vehicleId = vehicleRow?.id ?? null;
+        if (vehicleCreateError) throw vehicleCreateError;
+        vehicleId = (vehicleRow as VehicleRow | null)?.id ?? null;
+      } else {
+        const { error: vehicleUpdateError } = await supabase
+          .from("vehicles")
+          .update({
+            customer_id: customerId,
+            year: normalizedYear,
+            make: normalizedMake,
+            model: normalizedModel,
+            vin: normalizedVin,
+            plate: normalizedPlate || null,
+          })
+          .eq("id", vehicleId);
+
+        if (vehicleUpdateError) throw vehicleUpdateError;
       }
 
       if (!vehicleId) {
         throw new Error("Vehicle was not created or found.");
       }
 
-      const jobNotes = [
-        `Concern: ${form.concern.trim() || "N/A"}`,
-        `Requested Work: ${form.requestedWork.trim() || "N/A"}`,
-        `Internal Notes: ${form.notes.trim() || "N/A"}`,
-        `Mileage In: ${form.mileageIn.trim() || "N/A"}`,
-        `Diagnostic Fee: ${form.diagnosticFee.trim() || "N/A"}`,
-        `Written By: ${form.writtenBy.trim() || "N/A"}`,
+      const intakeNotes = [
+        "SHOPPROOF INTAKE SNAPSHOT",
+        `Customer Address: ${normalizedAddress || "N/A"}`,
+        `Customer Email: ${normalizedEmail || "N/A"}`,
+        `Mileage In: ${normalizedMileage || "N/A"}`,
+        `Requested Work: ${normalizedRequestedWork || "N/A"}`,
+        `Internal Notes: ${normalizedNotes || "N/A"}`,
+        `Diagnostic Fee: ${normalizedFee || "N/A"}`,
+        `Written By: ${normalizedWrittenBy || "N/A"}`,
+        "Required Drop-Off Photos:",
+        "- Exterior x4",
+        "- Wheels x4",
+        "- Interior x3 (seat/console, door panel, dash/odometer)",
       ].join("\n");
 
       const { data: insertedJob, error: jobError } = await supabase
@@ -630,8 +721,8 @@ export default function ShopProofNewPage() {
           vehicle_id: vehicleId,
           status: "New Intake",
           approval_state: "Not Requested",
-          concern: form.concern.trim(),
-          notes: jobNotes,
+          concern: normalizedConcern,
+          notes: intakeNotes,
           findings: "",
           assigned_to: null,
         })
@@ -647,22 +738,10 @@ export default function ShopProofNewPage() {
         return;
       }
 
-      throw new Error("Job was inserted but no job id was returned.");
+      throw new Error("Intake record was inserted but no id was returned.");
     } catch (error) {
-      console.error("Create job error:", error);
-
-      const detailedMessage = getReadableErrorMessage(error);
-
-      try {
-        const localJob = createLocalFallbackJob(form);
-        saveLocalJob(localJob);
-        sessionStorage.removeItem(DRAFT_STORAGE_KEY);
-        setScanMessage("Supabase create failed. Local fallback record created.");
-        router.push(`/shopproof/jobs/${localJob.id}`);
-        return;
-      } catch {
-        setSubmitError(detailedMessage);
-      }
+      console.error("Create intake error:", error);
+      fallbackToLocal(getReadableErrorMessage(error));
     } finally {
       setIsCreating(false);
     }
@@ -673,36 +752,36 @@ export default function ShopProofNewPage() {
       style={{
         minHeight: "100vh",
         backgroundImage: `
-          radial-gradient(circle at 50% 0%, rgba(57,122,255,0.18) 0%, rgba(57,122,255,0.06) 18%, rgba(57,122,255,0) 40%),
-          radial-gradient(circle at 0% 100%, rgba(39,217,191,0.06) 0%, rgba(39,217,191,0.02) 18%, rgba(39,217,191,0) 36%),
-          radial-gradient(circle at 100% 12%, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 12%, rgba(255,255,255,0) 30%),
+          radial-gradient(circle at 12% 0%, rgba(37,99,235,0.08) 0%, rgba(37,99,235,0.03) 24%, rgba(37,99,235,0) 44%),
+          radial-gradient(circle at 100% 0%, rgba(5,150,105,0.05) 0%, rgba(5,150,105,0.02) 18%, rgba(5,150,105,0) 34%),
+          linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.03) 22%, rgba(255,255,255,0) 42%),
           repeating-linear-gradient(
             0deg,
-            rgba(255,255,255,0.012) 0px,
-            rgba(255,255,255,0.012) 1px,
+            rgba(19,32,49,0.026) 0px,
+            rgba(19,32,49,0.026) 1px,
             transparent 1px,
-            transparent 46px
+            transparent 56px
           ),
           repeating-linear-gradient(
             90deg,
-            rgba(255,255,255,0.006) 0px,
-            rgba(255,255,255,0.006) 1px,
+            rgba(19,32,49,0.016) 0px,
+            rgba(19,32,49,0.016) 1px,
             transparent 1px,
-            transparent 74px
+            transparent 88px
           ),
-          ${THEME.pageBase}
+          ${THEME.page}
         `,
         color: THEME.text,
-        padding: isMobile ? "8px" : "18px",
+        padding: isMobile ? 8 : 18,
       }}
     >
       <div
         style={{
-          maxWidth: "1360px",
+          maxWidth: 1380,
           margin: "0 auto",
           background: THEME.shell,
-          border: THEME.border,
-          borderRadius: "30px",
+          border: THEME.shellBorder,
+          borderRadius: 30,
           boxShadow: THEME.shellShadow,
           overflow: "hidden",
           position: "relative",
@@ -713,622 +792,611 @@ export default function ShopProofNewPage() {
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
-            background:
-              "radial-gradient(circle at 22% 0%, rgba(59,130,246,0.18), transparent 32%), radial-gradient(circle at 78% 0%, rgba(39,217,191,0.10), transparent 24%)",
+            background: `
+              ${THEME.shellOverlay},
+              radial-gradient(circle at 14% 0%, rgba(37,99,235,0.08), transparent 28%),
+              radial-gradient(circle at 86% 0%, rgba(5,150,105,0.05), transparent 24%)
+            `,
           }}
         />
 
-        <div
+        <header
           style={{
-            position: "absolute",
-            left: isMobile ? 12 : 22,
-            right: isMobile ? 12 : 22,
-            top: isMobile ? 56 : 64,
-            height: 2,
-            background:
-              "linear-gradient(90deg, rgba(59,130,246,0) 0%, rgba(59,130,246,0.38) 22%, rgba(59,130,246,0.72) 50%, rgba(59,130,246,0.38) 78%, rgba(59,130,246,0) 100%)",
-            boxShadow: "0 0 22px rgba(59,130,246,0.28)",
-            pointerEvents: "none",
-          }}
-        />
-
-        <div
-          style={{
-            minHeight: isMobile ? "auto" : 84,
-            padding: isMobile ? "10px 10px 8px" : "15px 18px",
+            position: "relative",
+            padding: isMobile ? "12px 12px 10px" : "16px 18px 14px",
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "auto 1fr",
+            gridTemplateColumns: isMobile ? "1fr" : "auto 1fr auto",
             gap: isMobile ? 10 : 14,
             alignItems: "center",
-            borderBottom: `1px solid ${THEME.lineFaint}`,
-            position: "relative",
-            background:
-              "linear-gradient(180deg, rgba(10,20,31,0.86) 0%, rgba(6,13,22,0.5) 100%)",
+            borderBottom: `1px solid ${THEME.line}`,
+            background: THEME.topbar,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: isMobile ? 10 : 12,
-              minWidth: 0,
-              position: "relative",
-              zIndex: 1,
-            }}
+          <button
+            type="button"
+            onClick={() => router.push("/shopproof")}
+            style={iconButtonStyle()}
           >
+            <ArrowLeft size={18} />
+          </button>
+
+          <div style={{ minWidth: 0 }}>
             <div
               style={{
-                width: isMobile ? 38 : 42,
-                height: isMobile ? 38 : 42,
-                borderRadius: 12,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                border: THEME.borderSoft,
-                background:
-                  "linear-gradient(180deg, rgba(17,32,48,0.98) 0%, rgba(10,19,29,0.98) 100%)",
-                boxShadow:
-                  "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18)",
-                flexShrink: 0,
-              }}
-            >
-              <Shield
-                size={isMobile ? 20 : 22}
-                strokeWidth={2.1}
-                color={THEME.blue}
-              />
-            </div>
-
-            <div
-              style={{
-                fontSize: isMobile ? 18 : 28,
-                lineHeight: 1,
-                fontWeight: 900,
-                letterSpacing: "-0.04em",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <span style={{ color: THEME.text }}>Shop</span>
-              <span style={{ color: "#78ABFF" }}>PROOF</span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 10,
-              minWidth: 0,
-              position: "relative",
-              zIndex: 1,
-            }}
-          >
-            <TopStatusBox title="New Job" value="Intake" />
-            <TopStatusBox title={`${intakeProgress}%`} value="Ready" />
-            <TopStatusBox title={`${readyCount}/${readinessItems.length}`} value="Complete" />
-          </div>
-        </div>
-
-        <div
-          style={{
-            position: "relative",
-            padding: isMobile ? "14px 10px 16px" : "16px",
-          }}
-        >
-          <div
-            style={{
-              background: THEME.panel,
-              border: THEME.borderSoft,
-              borderRadius: "24px",
-              boxShadow: THEME.panelShadow,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                padding: isMobile ? "14px 14px" : "18px 20px",
-                borderBottom: `1px solid ${THEME.lineSoft}`,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "12px",
+                gap: 12,
+                minWidth: 0,
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <FileText size={16} color={THEME.textSoft} />
-                <div
-                  style={{
-                    fontWeight: 800,
-                    letterSpacing: "-0.03em",
-                    fontSize: "1.1rem",
-                  }}
-                >
-                  New Intake
-                </div>
+              <div style={logoShieldStyle()}>
+                <Shield size={20} color={THEME.blueStrong} strokeWidth={2.2} />
               </div>
 
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button type="button" style={ghostButton} onClick={() => router.back()}>
-                  <ArrowLeft size={15} />
-                  Back
-                </button>
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: isMobile ? 20 : 28,
+                    lineHeight: 1,
+                    fontWeight: 900,
+                    letterSpacing: "-0.04em",
+                    color: THEME.text,
+                  }}
+                >
+                  ShopPROOF Intake
+                </div>
+                <div
+                  style={{
+                    marginTop: 5,
+                    fontSize: 13,
+                    color: THEME.textMuted,
+                  }}
+                >
+                  Vehicle drop-off documentation and intake authorization setup.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: isMobile ? "flex-start" : "flex-end",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <button type="button" onClick={handleSaveDraft} style={ghostButtonStyle()}>
+              <Save size={16} />
+              Save Draft
+            </button>
+          </div>
+        </header>
+
+        <section
+          style={{
+            position: "relative",
+            background: THEME.statusBar,
+            borderBottom: `1px solid rgba(255,255,255,0.08)`,
+            padding: isMobile ? "12px" : "14px 18px",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "1.3fr 0.8fr 0.8fr 1fr",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "rgba(218,230,243,0.72)",
+                  marginBottom: 8,
+                  fontWeight: 800,
+                }}
+              >
+                Intake readiness
+              </div>
+              <div
+                style={{
+                  height: 11,
+                  borderRadius: 999,
+                  overflow: "hidden",
+                  background: "rgba(255,255,255,0.10)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${readinessPercent}%`,
+                    height: "100%",
+                    background:
+                      readinessPercent >= 100
+                        ? "linear-gradient(90deg, #059669 0%, #10b981 100%)"
+                        : readinessPercent >= 60
+                        ? "linear-gradient(90deg, #ca8a04 0%, #eab308 100%)"
+                        : "linear-gradient(90deg, #2563eb 0%, #3b82f6 100%)",
+                    transition: "width 180ms ease",
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: "rgba(218,230,243,0.76)",
+                }}
+              >
+                {readyCount} of {readinessItems.length} checkpoints cleared
               </div>
             </div>
 
-            <div style={{ padding: isMobile ? "12px 10px 14px" : "12px" }}>
-              <div style={{ display: "grid", gap: "12px" }}>
-                <SectionCard
-                  icon={<UserCircle2 size={17} />}
-                  title="Customer Info"
-                  subtitle="Who owns the vehicle and how to reach them"
-                  accent="blue"
-                >
-                  <div style={twoColGrid(isMobile)}>
-                    <InputBlock
-                      label="Customer Name"
+            <StatusPill
+              label="Current state"
+              value={isReadyToCreate ? "Ready to create intake" : "In progress"}
+              tone={isReadyToCreate ? "green" : readinessPercent >= 60 ? "yellow" : "red"}
+              dark
+            />
+
+            <StatusPill
+              label="Next record step"
+              value="Drop-off photo set"
+              tone={photoSetupState.tone}
+              dark
+            />
+
+            <div
+              style={{
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+                padding: "10px 12px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "rgba(218,230,243,0.66)",
+                  fontWeight: 800,
+                  marginBottom: 5,
+                }}
+              >
+                Intake guidance
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                  color: "rgba(240,246,252,0.92)",
+                }}
+              >
+                Create the intake first. Findings, approvals, and release stay downstream.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div
+          style={{
+            padding: isMobile ? 10 : 18,
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1.45fr 0.95fr",
+            gap: isMobile ? 10 : 16,
+            alignItems: "start",
+          }}
+        >
+          <div style={{ display: "grid", gap: isMobile ? 10 : 14 }}>
+            <Panel
+              title="Customer"
+              subtitle="Who dropped the vehicle off and how the shop can reach them."
+              icon={<UserCircle2 size={18} color={THEME.blueStrong} />}
+            >
+              <div style={fieldGridStyle(isMobile)}>
+                <FieldShell
+                  label="Customer name"
+                  state={customerNameState}
+                  required
+                  input={
+                    <TextInput
                       value={form.customerName}
                       onChange={(value) => updateField("customerName", value)}
-                      placeholder="Full customer name"
-                      validation={customerNameState.hint}
+                      placeholder="Full name"
                     />
-                    <InputBlock
-                      label="Phone"
+                  }
+                />
+
+                <FieldShell
+                  label="Phone"
+                  state={phoneState}
+                  required
+                  input={
+                    <TextInput
                       value={form.phone}
                       onChange={handlePhoneChange}
-                      placeholder="(555) 555-5555"
-                      validation={phoneState.hint}
+                      placeholder="(318) 555-1212"
+                      inputMode="tel"
                     />
-                  </div>
+                  }
+                />
 
-                  <div style={{ marginTop: "12px" }}>
-                    <InputBlock
-                      label="Customer Address"
+                <FieldShell
+                  label="Customer address"
+                  state={addressState}
+                  required
+                  input={
+                    <TextInput
                       value={form.customerAddress}
                       onChange={(value) => updateField("customerAddress", value)}
-                      placeholder="Full address"
-                      validation={addressState.hint}
+                      placeholder="Street, city, state, ZIP"
                     />
-                  </div>
+                  }
+                  wide
+                />
 
-                  <div style={{ marginTop: "12px" }}>
-                    <InputBlock
-                      label="Email"
+                <FieldShell
+                  label="Email"
+                  state={{
+                    tone: form.email.trim() ? "green" : "yellow",
+                    status: form.email.trim() ? "Email recorded" : "Optional",
+                    hint: "Helpful for sending documents and signatures later.",
+                  }}
+                  input={
+                    <TextInput
                       value={form.email}
                       onChange={(value) => updateField("email", value)}
-                      placeholder="Optional"
+                      placeholder="name@email.com"
+                      inputMode="email"
                     />
-                  </div>
-                </SectionCard>
+                  }
+                  wide
+                />
+              </div>
+            </Panel>
 
-                <SectionCard
-                  icon={<CarFront size={17} />}
-                  title="Vehicle Info"
-                  subtitle="Manual VIN entry with reliable ShopPROOF decode"
-                  accent="emerald"
+            <Panel
+              title="Vehicle"
+              subtitle="Identity of the vehicle being documented at drop-off."
+              icon={<CarFront size={18} color={THEME.blueStrong} />}
+            >
+              <div style={{ display: "grid", gap: 12 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile ? "1fr" : "1.2fr auto",
+                    gap: 10,
+                    alignItems: "end",
+                  }}
                 >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: isMobile ? "1fr" : "2fr 220px",
-                      gap: "12px",
-                      alignItems: "end",
-                    }}
+                  <FieldShell
+                    label="VIN"
+                    state={vinState}
+                    required
+                    input={
+                      <TextInput
+                        value={form.vin}
+                        onChange={handleVinChange}
+                        placeholder="17-character VIN"
+                        autoCapitalize="characters"
+                        spellCheck={false}
+                      />
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleDecodeVin}
+                    disabled={!canDecodeVin || isDecodingVin}
+                    style={primaryGhostButtonStyle(!canDecodeVin || isDecodingVin)}
                   >
-                    <InputBlock
-                      label="VIN"
-                      value={form.vin}
-                      onChange={handleVinChange}
-                      placeholder="17-character VIN"
-                      validation={vinState.hint}
-                    />
+                    {isDecodingVin ? <LoaderCircle size={16} className="spin" /> : <Search size={16} />}
+                    {isDecodingVin ? "Decoding..." : "Decode VIN"}
+                  </button>
+                </div>
 
-                    <div>
-                      <div style={miniLabel}>VIN Tools</div>
-                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          style={{
-                            ...primaryButton,
-                            opacity: canDecodeVin && !isDecodingVin ? 1 : 0.82,
-                            cursor:
-                              canDecodeVin && !isDecodingVin ? "pointer" : "not-allowed",
-                          }}
-                          onClick={handleDecodeVin}
-                          disabled={!canDecodeVin || isDecodingVin}
-                        >
-                          {isDecodingVin ? (
-                            <LoaderCircle size={15} className="spin" />
-                          ) : (
-                            <Search size={15} />
-                          )}
-                          {isDecodingVin ? "Decoding..." : "Decode VIN"}
-                        </button>
+                <InfoStrip tone={canDecodeVin ? "blue" : "yellow"} icon={<FileText size={15} />}>
+                  {scanMessage}
+                </InfoStrip>
 
-                        <button
-                          type="button"
-                          style={ghostButton}
-                          onClick={handlePrefillDemo}
-                          disabled={isDecodingVin}
-                        >
-                          <CheckCircle2 size={15} />
-                          Demo Fill
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: "10px",
-                      borderRadius: "12px",
-                      border: `1px solid ${THEME.lineFaint}`,
-                      background: "rgba(5,12,20,0.42)",
-                      padding: "10px 12px",
-                      color: THEME.textSoft,
-                      fontSize: "0.84rem",
-                      fontWeight: 600,
+                <div style={fieldGridStyle(isMobile)}>
+                  <FieldShell
+                    label="Year"
+                    state={{
+                      tone: form.year.trim() ? "green" : "yellow",
+                      status: form.year.trim() ? "Year recorded" : "Needed for identity",
                     }}
-                  >
-                    {scanMessage}
-                  </div>
+                    input={
+                      <TextInput
+                        value={form.year}
+                        onChange={(value) => updateField("year", value.replace(/[^\d]/g, "").slice(0, 4))}
+                        placeholder="YYYY"
+                        inputMode="numeric"
+                      />
+                    }
+                  />
 
-                  <div style={{ ...twoColGrid(isMobile), marginTop: "12px" }}>
-                    <InputBlock
-                      label="Year"
-                      value={form.year}
-                      onChange={(value) =>
-                        updateField("year", digitsOnly(value).slice(0, 4))
-                      }
-                      placeholder="2018"
-                    />
-                    <InputBlock
-                      label="Make"
-                      value={form.make}
-                      onChange={(value) => updateField("make", value)}
-                      placeholder="Ford"
-                    />
-                  </div>
+                  <FieldShell
+                    label="Make"
+                    state={{
+                      tone: form.make.trim() ? "green" : "yellow",
+                      status: form.make.trim() ? "Make recorded" : "Needed for identity",
+                    }}
+                    input={
+                      <TextInput
+                        value={form.make}
+                        onChange={(value) => updateField("make", value)}
+                        placeholder="Ford"
+                      />
+                    }
+                  />
 
-                  <div style={{ ...twoColGrid(isMobile), marginTop: "12px" }}>
-                    <InputBlock
-                      label="Model"
-                      value={form.model}
-                      onChange={(value) => updateField("model", value)}
-                      placeholder="F-150"
-                      validation={vehicleIdentityState.hint}
-                    />
-                    <InputBlock
-                      label="Plate"
-                      value={form.plate}
-                      onChange={(value) => updateField("plate", value.toUpperCase())}
-                      placeholder="License plate"
-                    />
-                  </div>
+                  <FieldShell
+                    label="Model"
+                    state={vehicleIdentityState}
+                    required
+                    input={
+                      <TextInput
+                        value={form.model}
+                        onChange={(value) => updateField("model", value)}
+                        placeholder="F-150"
+                      />
+                    }
+                  />
 
-                  <div style={{ marginTop: "12px" }}>
-                    <InputBlock
-                      label="Mileage In"
-                      value={form.mileageIn}
-                      onChange={handleMileageChange}
-                      placeholder="Current mileage"
-                      validation={mileageState.hint}
-                    />
-                  </div>
-                </SectionCard>
+                  <FieldShell
+                    label="Plate"
+                    state={{
+                      tone: form.plate.trim() ? "green" : "yellow",
+                      status: form.plate.trim() ? "Plate recorded" : "Optional but recommended",
+                    }}
+                    input={
+                      <TextInput
+                        value={form.plate}
+                        onChange={(value) => updateField("plate", value.toUpperCase())}
+                        placeholder="ABC-123"
+                        autoCapitalize="characters"
+                      />
+                    }
+                  />
 
-                <SectionCard
-                  icon={<Wrench size={17} />}
-                  title="Visit Info"
-                  subtitle="What brought the vehicle in and what the customer is authorizing"
-                  accent="orange"
-                >
-                  <div style={twoColGrid(isMobile)}>
-                    <InputBlock
-                      label="Diagnostic Fee"
-                      value={form.diagnosticFee}
-                      onChange={handleDiagnosticFeeChange}
-                      placeholder="135.00"
-                      validation={diagnosticFeeState.hint}
-                    />
-                    <SelectBlock
-                      label="Written By"
-                      value={form.writtenBy}
-                      onChange={(value) => updateField("writtenBy", value)}
-                      options={TEAM_MEMBERS.map((member) => member.name)}
-                    />
-                  </div>
+                  <FieldShell
+                    label="Mileage in"
+                    state={mileageState}
+                    required
+                    input={
+                      <TextInput
+                        value={form.mileageIn}
+                        onChange={handleMileageChange}
+                        placeholder="132,884"
+                        inputMode="numeric"
+                      />
+                    }
+                  />
+                </div>
+              </div>
+            </Panel>
 
-                  <div style={{ marginTop: "12px" }}>
-                    <TextAreaBlock
-                      label="Primary Concern"
+            <Panel
+              title="Intake details"
+              subtitle="What the customer is authorizing the shop to inspect at drop-off."
+              icon={<Wrench size={18} color={THEME.blueStrong} />}
+            >
+              <div style={{ display: "grid", gap: 12 }}>
+                <FieldShell
+                  label="Primary concern"
+                  state={concernState}
+                  required
+                  input={
+                    <TextArea
                       value={form.concern}
                       onChange={(value) => updateField("concern", value)}
-                      placeholder="Customer states..."
-                      validation={concernState.hint}
+                      placeholder="Customer concern / complaint"
+                      rows={3}
                     />
-                  </div>
+                  }
+                />
 
-                  <div style={{ marginTop: "12px" }}>
-                    <TextAreaBlock
-                      label="Requested Work / Authorization Notes"
+                <FieldShell
+                  label="Requested work"
+                  state={{
+                    tone: form.requestedWork.trim() ? "green" : "yellow",
+                    status: form.requestedWork.trim() ? "Request noted" : "Optional",
+                    hint: "Use this when the customer asks for a specific inspection or repair direction.",
+                  }}
+                  input={
+                    <TextArea
                       value={form.requestedWork}
                       onChange={(value) => updateField("requestedWork", value)}
-                      placeholder="Requested repairs, diag request, tow-in notes, approvals, etc."
+                      placeholder="Specific requested inspection or service"
+                      rows={3}
                     />
-                  </div>
+                  }
+                />
 
-                  <div style={{ marginTop: "12px" }}>
-                    <TextAreaBlock
-                      label="Internal Notes"
+                <FieldShell
+                  label="Internal notes"
+                  state={{
+                    tone: form.notes.trim() ? "green" : "yellow",
+                    status: form.notes.trim() ? "Notes recorded" : "Optional",
+                    hint: "Use for intake-only context. Findings belong later.",
+                  }}
+                  input={
+                    <TextArea
                       value={form.notes}
                       onChange={(value) => updateField("notes", value)}
-                      placeholder="Internal shop notes..."
+                      placeholder="Observed at drop-off, customer statements, intake context"
+                      rows={4}
                     />
+                  }
+                />
+
+                <div style={fieldGridStyle(isMobile)}>
+                  <FieldShell
+                    label="Diagnostic fee"
+                    state={diagnosticFeeState}
+                    required
+                    input={
+                      <TextInput
+                        value={form.diagnosticFee}
+                        onChange={handleDiagnosticFeeChange}
+                        placeholder="135.00"
+                        inputMode="decimal"
+                      />
+                    }
+                  />
+
+                  <FieldShell
+                    label="Written by"
+                    state={writtenByState}
+                    required
+                    input={
+                      <SelectInput
+                        value={form.writtenBy}
+                        onChange={(value) => updateField("writtenBy", value)}
+                        options={TEAM_MEMBERS.map((member) => ({
+                          value: member.name,
+                          label: `${member.name} · ${member.role}`,
+                        }))}
+                      />
+                    }
+                  />
+                </div>
+              </div>
+            </Panel>
+          </div>
+
+          <div style={{ display: "grid", gap: isMobile ? 10 : 14 }}>
+            <Panel
+              title="Condition photo requirements"
+              subtitle="This intake creates the record that the required drop-off photos attach to next."
+              icon={<Shield size={18} color={THEME.emerald} />}
+              accent="emerald"
+            >
+              <div style={{ display: "grid", gap: 12 }}>
+                <ChecklistCard
+                  title="Exterior"
+                  countLabel="4 required"
+                  items={["Front", "Rear", "Driver side", "Passenger side"]}
+                />
+                <ChecklistCard
+                  title="Wheels"
+                  countLabel="4 required"
+                  items={[
+                    "Driver front wheel",
+                    "Passenger front wheel",
+                    "Driver rear wheel",
+                    "Passenger rear wheel",
+                  ]}
+                />
+                <ChecklistCard
+                  title="Interior"
+                  countLabel="3 required"
+                  items={[
+                    "Seat and center console",
+                    "Door panel",
+                    "Dash / odometer with state noted",
+                  ]}
+                />
+
+                <InfoStrip tone={photoSetupState.tone} icon={<CameraGlyph />}>
+                  {photoSetupState.hint || "Save intake first, then continue into the required photo set."}
+                </InfoStrip>
+              </div>
+            </Panel>
+
+            <Panel
+              title="Readiness board"
+              subtitle="Minimum identity and authorization fields before the intake record is created."
+              icon={<CheckCircle2 size={18} color={THEME.blueStrong} />}
+              accent="blue"
+            >
+              <div style={{ display: "grid", gap: 10 }}>
+                {readinessItems.map((item) => (
+                  <ReadinessRow key={item.key} item={item} />
+                ))}
+              </div>
+            </Panel>
+
+            <Panel
+              title="Create intake"
+              subtitle="This creates the starting record. It does not add findings, approvals, or release yet."
+              icon={<FileText size={18} color={THEME.blueStrong} />}
+              accent="blue"
+            >
+              <div style={{ display: "grid", gap: 12 }}>
+                {submitError ? (
+                  <div style={errorBoxStyle()}>
+                    <AlertCircle size={16} />
+                    <span>{submitError}</span>
                   </div>
-                </SectionCard>
-
-                <SectionCard
-                  icon={<Shield size={17} />}
-                  title="Intake Readiness"
-                  subtitle="Progress, summary, and missing items in one review block"
-                  accent="blue"
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: "12px",
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      marginBottom: "12px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.95rem",
-                        fontWeight: 800,
-                        color: THEME.textSoft,
-                      }}
-                    >
-                      {intakeProgress}% Intake Ready
-                    </div>
-
-                    <div
-                      style={{
-                        borderRadius: "999px",
-                        padding: "8px 12px",
-                        border: `1px solid ${
-                          isReadyToCreate ? THEME.emeraldLine : THEME.orangeLine
-                        }`,
-                        background: isReadyToCreate
-                          ? THEME.emeraldSoft
-                          : THEME.orangeSoft,
-                        color: isReadyToCreate ? THEME.emerald : THEME.orange,
-                        fontSize: "0.83rem",
-                        fontWeight: 800,
-                      }}
-                    >
-                      {isReadyToCreate ? "Ready to create job" : "Intake in progress"}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      height: "14px",
-                      borderRadius: "999px",
-                      background: "rgba(5,12,20,0.8)",
-                      border: `1px solid ${THEME.lineFaint}`,
-                      overflow: "hidden",
-                      marginBottom: "14px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${intakeProgress}%`,
-                        height: "100%",
-                        background:
-                          intakeProgress >= 100
-                            ? "linear-gradient(90deg, #27D9BF 0%, #4EF0D8 100%)"
-                            : "linear-gradient(90deg, #3B82F6 0%, #72A8FF 100%)",
-                      }}
-                    />
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: isMobile
-                        ? "1fr"
-                        : "repeat(3, minmax(0, 1fr))",
-                      gap: "10px",
-                      marginBottom: "14px",
-                    }}
-                  >
-                    <SummaryTile label="Customer" value={form.customerName || "Not entered"} />
-                    <SummaryTile label="Address" value={form.customerAddress || "Not entered"} />
-                    <SummaryTile
-                      label="Vehicle"
-                      value={
-                        [form.year, form.make, form.model].filter(Boolean).join(" ") ||
-                        "Not entered"
-                      }
-                    />
-                    <SummaryTile label="VIN" value={form.vin || "Not entered"} />
-                    <SummaryTile label="Mileage" value={form.mileageIn || "Not entered"} />
-                    <SummaryTile
-                      label="Diagnostic Fee"
-                      value={form.diagnosticFee ? `$${form.diagnosticFee}` : "Not entered"}
-                    />
-                    <SummaryTile label="Written By" value={form.writtenBy || "Not selected"} />
-                  </div>
-
-                  <div
-                    style={{
-                      borderTop: `1px solid ${THEME.lineSoft}`,
-                      paddingTop: "14px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.9rem",
-                        fontWeight: 800,
-                        color: THEME.textSoft,
-                        marginBottom: "10px",
-                      }}
-                    >
-                      Items still needed
-                    </div>
-
-                    <div style={{ display: "grid", gap: "8px" }}>
-                      {readinessItems.map((item) => {
-                        const colors = toneColor(item.tone);
-
-                        return (
-                          <div
-                            key={item.key}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: "12px",
-                              padding: "12px 14px",
-                              borderRadius: "14px",
-                              border: `1px solid ${colors.line}`,
-                              background: colors.soft,
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "10px",
-                                minWidth: 0,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  width: "8px",
-                                  height: "8px",
-                                  borderRadius: "999px",
-                                  background: colors.text,
-                                  boxShadow: `0 0 12px ${colors.text}`,
-                                  flexShrink: 0,
-                                }}
-                              />
-                              <span
-                                style={{
-                                  color: THEME.text,
-                                  fontWeight: 700,
-                                  fontSize: "0.92rem",
-                                }}
-                              >
-                                {item.label}
-                              </span>
-                            </div>
-
-                            <span
-                              style={{
-                                color: colors.text,
-                                fontSize: "0.82rem",
-                                fontWeight: 800,
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {item.status}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {submitError ? (
-                      <div
-                        style={{
-                          marginTop: "12px",
-                          padding: "10px 12px",
-                          borderRadius: "12px",
-                          background: "rgba(255,107,122,0.12)",
-                          border: "1px solid rgba(255,107,122,0.28)",
-                          color: THEME.red,
-                          fontSize: "0.82rem",
-                          fontWeight: 800,
-                        }}
-                      >
-                        {submitError}
-                      </div>
-                    ) : null}
-                  </div>
-                </SectionCard>
+                ) : null}
 
                 <div
                   style={{
-                    background: THEME.card,
-                    border: THEME.borderSoft,
-                    borderRadius: "20px",
-                    padding: isMobile ? "14px 12px" : "16px 18px",
+                    borderRadius: 18,
+                    border: THEME.cardBorder,
+                    background: `
+                      linear-gradient(180deg, rgba(247,250,254,0.98) 0%, rgba(239,245,251,1) 100%),
+                      linear-gradient(90deg, rgba(37,99,235,0.03) 0%, rgba(37,99,235,0) 36%)
+                    `,
                     boxShadow: THEME.cardShadow,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    alignItems: "center",
-                    flexWrap: "wrap",
+                    padding: 14,
+                    display: "grid",
+                    gap: 8,
                   }}
                 >
-                  <div>
-                    <div
-                      style={{
-                        fontSize: "1rem",
-                        fontWeight: 800,
-                        letterSpacing: "-0.03em",
-                      }}
-                    >
-                      Action Bar
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "0.88rem",
-                        color: THEME.textMuted,
-                        marginTop: "3px",
-                      }}
-                    >
-                      Manual VIN entry, stable decode, clean intake, then create job.
-                    </div>
-                  </div>
+                  <SummaryLine label="Customer" value={form.customerName || "—"} />
+                  <SummaryLine
+                    label="Vehicle"
+                    value={[form.year, form.make, form.model].filter(Boolean).join(" ") || "—"}
+                  />
+                  <SummaryLine label="VIN" value={form.vin || "—"} mono />
+                  <SummaryLine label="Mileage in" value={form.mileageIn || "—"} />
+                  <SummaryLine label="Concern" value={form.concern || "—"} />
+                  <SummaryLine
+                    label="Diagnostic fee"
+                    value={form.diagnosticFee ? `$${form.diagnosticFee}` : "—"}
+                  />
+                  <SummaryLine label="Written by" value={form.writtenBy || "—"} />
+                </div>
 
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button type="button" style={ghostButton} onClick={() => router.back()}>
-                      <ArrowLeft size={15} />
-                      Back
-                    </button>
-                    <button type="button" style={ghostButton} onClick={handleSaveDraft}>
-                      <Save size={15} />
-                      Save Draft
-                    </button>
-                    <button
-                      type="button"
-                      style={{
-                        ...primaryButton,
-                        opacity: isReadyToCreate && !isCreating ? 1 : 0.82,
-                        cursor:
-                          isReadyToCreate && !isCreating ? "pointer" : "not-allowed",
-                      }}
-                      onClick={handleCreateJob}
-                      disabled={!isReadyToCreate || isCreating}
-                    >
-                      {isCreating ? "Creating..." : "Create Job"}
-                    </button>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={handleCreateIntake}
+                    disabled={isCreating}
+                    style={primaryButtonStyle()}
+                  >
+                    {isCreating ? <LoaderCircle size={18} className="spin" /> : <FileText size={18} />}
+                    {isCreating ? "Creating intake..." : "Create Intake Record"}
+                  </button>
+
+                  <div
+                    style={{
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      color: THEME.textMuted,
+                    }}
+                  >
+                    After this record is created, the next steps are the condition photos and intake authorization.
                   </div>
                 </div>
               </div>
-            </div>
+            </Panel>
           </div>
         </div>
       </div>
 
       <style jsx>{`
         .spin {
-          animation: spin 1s linear infinite;
+          animation: spin 0.9s linear infinite;
         }
 
         @keyframes spin {
@@ -1344,77 +1412,29 @@ export default function ShopProofNewPage() {
   );
 }
 
-function TopStatusBox({
-  title,
-  value,
-}: {
-  title: string;
-  value: string;
-}) {
-  return (
-    <div
-      style={{
-        minHeight: "56px",
-        borderRadius: "14px",
-        border: `1px solid ${THEME.lineSoft}`,
-        background:
-          "linear-gradient(180deg, rgba(14,27,44,0.72) 0%, rgba(8,16,27,0.62) 100%)",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        padding: "0 14px",
-      }}
-    >
-      <span
-        style={{
-          fontWeight: 900,
-          color: THEME.text,
-          fontSize: "0.96rem",
-          letterSpacing: "-0.03em",
-        }}
-      >
-        {title}
-      </span>
-      <span
-        style={{
-          color: THEME.textSoft,
-          fontSize: "0.83rem",
-          fontWeight: 700,
-          opacity: 0.92,
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function SectionCard({
-  icon,
+function Panel({
   title,
   subtitle,
-  accent,
+  icon,
   children,
+  accent = "blue",
 }: {
-  icon: ReactNode;
   title: string;
   subtitle: string;
-  accent: Accent;
+  icon: ReactNode;
   children: ReactNode;
+  accent?: "blue" | "emerald";
 }) {
-  const accentMap: Record<Accent, string> = {
-    blue: THEME.blueLine,
-    orange: THEME.orangeLine,
-    emerald: THEME.emeraldLine,
-  };
+  const accentColor = accent === "emerald" ? THEME.emeraldLine : THEME.blueLine;
+  const accentGlow = accent === "emerald" ? "rgba(5,150,105,0.08)" : "rgba(37,99,235,0.08)";
 
   return (
     <section
       style={{
-        background: THEME.card,
-        border: THEME.borderSoft,
-        borderRadius: "20px",
-        boxShadow: THEME.cardShadow,
+        borderRadius: 24,
+        border: THEME.panelBorder,
+        background: THEME.panel,
+        boxShadow: THEME.panelShadow,
         overflow: "hidden",
         position: "relative",
       }}
@@ -1422,224 +1442,475 @@ function SectionCard({
       <div
         style={{
           position: "absolute",
-          inset: "0 auto 0 0",
-          width: "3px",
-          background: accentMap[accent],
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          background: accentColor,
+          opacity: 0.9,
         }}
       />
 
-      <div style={{ padding: "14px 14px 12px 16px" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-          <div
-            style={{
-              color: THEME.textSoft,
-              marginTop: "2px",
-              flexShrink: 0,
-            }}
-          >
-            {icon}
-          </div>
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 72,
+          pointerEvents: "none",
+          background: `linear-gradient(180deg, ${accentGlow} 0%, rgba(255,255,255,0) 100%)`,
+        }}
+      />
 
-          <div>
-            <div
-              style={{
-                fontSize: "1.02rem",
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-                color: THEME.text,
-              }}
-            >
-              {title}
-            </div>
-            <div
-              style={{
-                fontSize: "0.86rem",
-                color: THEME.textMuted,
-                marginTop: "2px",
-              }}
-            >
-              {subtitle}
-            </div>
-          </div>
+      <div
+        style={{
+          position: "relative",
+          padding: "15px 16px 13px",
+          borderBottom: `1px solid ${THEME.lineFaint}`,
+          display: "grid",
+          gridTemplateColumns: "auto 1fr",
+          gap: 12,
+          alignItems: "start",
+        }}
+      >
+        <div
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: THEME.cardBorder,
+            background: "rgba(255,255,255,0.82)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.76)",
+          }}
+        >
+          {icon}
         </div>
 
-        <div style={{ marginTop: "12px" }}>{children}</div>
+        <div>
+          <div
+            style={{
+              fontSize: 18,
+              lineHeight: 1.1,
+              fontWeight: 900,
+              letterSpacing: "-0.03em",
+              color: THEME.text,
+            }}
+          >
+            {title}
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 13,
+              lineHeight: 1.45,
+              color: THEME.textMuted,
+            }}
+          >
+            {subtitle}
+          </div>
+        </div>
       </div>
+
+      <div style={{ position: "relative", padding: 16 }}>{children}</div>
     </section>
   );
 }
 
-function InputBlock({
+function FieldShell({
   label,
-  value,
-  onChange,
-  placeholder,
-  validation,
+  state,
+  input,
+  required,
+  wide,
 }: {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  validation?: string;
+  state: FieldState;
+  input: ReactNode;
+  required?: boolean;
+  wide?: boolean;
 }) {
-  const hasValidation = Boolean(validation);
-
   return (
-    <div>
-      <div style={fieldLabel}>{label}</div>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
+    <div style={{ display: "grid", gap: 8, gridColumn: wide ? "1 / -1" : undefined }}>
+      <div
         style={{
-          ...inputBase,
-          border: hasValidation
-            ? `1px solid ${THEME.redLine}`
-            : `1px solid ${THEME.lineSoft}`,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
         }}
-      />
-      {validation ? (
-        <div style={validationRow}>
-          <AlertCircle size={13} />
-          {validation}
+      >
+        <div
+          style={{
+            fontSize: 12,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            fontWeight: 800,
+            color: THEME.textSoft,
+          }}
+        >
+          {label}
+        </div>
+        {required ? <RequiredPill /> : null}
+        <TinyStatus tone={state.tone} text={state.status} />
+      </div>
+
+      {input}
+
+      {state.hint ? (
+        <div
+          style={{
+            fontSize: 12,
+            lineHeight: 1.45,
+            color: THEME.textMuted,
+          }}
+        >
+          {state.hint}
         </div>
       ) : null}
     </div>
   );
 }
 
-function TextAreaBlock({
-  label,
+function TextInput({
   value,
   onChange,
   placeholder,
-  validation,
+  inputMode,
+  autoCapitalize,
+  spellCheck,
 }: {
-  label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  validation?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  autoCapitalize?: string;
+  spellCheck?: boolean;
 }) {
-  const hasValidation = Boolean(validation);
-
   return (
-    <div>
-      <div style={fieldLabel}>{label}</div>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          ...inputBase,
-          minHeight: "116px",
-          resize: "vertical",
-          paddingTop: 12,
-          border: hasValidation
-            ? `1px solid ${THEME.redLine}`
-            : `1px solid ${THEME.lineSoft}`,
-          fontFamily: "inherit",
-        }}
-      />
-      {validation ? (
-        <div style={validationRow}>
-          <AlertCircle size={13} />
-          {validation}
-        </div>
-      ) : null}
-    </div>
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      inputMode={inputMode}
+      autoCapitalize={autoCapitalize}
+      spellCheck={spellCheck}
+      style={inputStyle()}
+    />
   );
 }
 
-function SelectBlock({
-  label,
+function TextArea({
+  value,
+  onChange,
+  placeholder,
+  rows,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  rows?: number;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      style={{
+        ...inputStyle(),
+        resize: "vertical",
+        minHeight: rows ? rows * 24 + 16 : 96,
+        paddingTop: 12,
+        paddingBottom: 12,
+      }}
+    />
+  );
+}
+
+function SelectInput({
   value,
   onChange,
   options,
 }: {
-  label: string;
   value: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<{ value: string; label: string }>;
 }) {
   return (
-    <div>
-      <div style={fieldLabel}>{label}</div>
-      <div style={{ position: "relative" }}>
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+    <div style={{ position: "relative" }}>
+      <select value={value} onChange={(event) => onChange(event.target.value)} style={inputStyle(true)}>
+        {options.map((option) => (
+          <option key={`${option.value}-${option.label}`} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        size={16}
+        color={THEME.textMuted}
+        style={{
+          position: "absolute",
+          right: 12,
+          top: "50%",
+          transform: "translateY(-50%)",
+          pointerEvents: "none",
+        }}
+      />
+    </div>
+  );
+}
+
+function ChecklistCard({
+  title,
+  countLabel,
+  items,
+}: {
+  title: string;
+  countLabel: string;
+  items: string[];
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 18,
+        border: THEME.cardBorder,
+        background: `
+          linear-gradient(180deg, rgba(247,250,254,0.98) 0%, rgba(239,245,251,1) 100%),
+          linear-gradient(90deg, rgba(5,150,105,0.025) 0%, rgba(5,150,105,0) 38%)
+        `,
+        boxShadow: THEME.cardShadow,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "12px 14px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          borderBottom: `1px solid ${THEME.lineFaint}`,
+        }}
+      >
+        <div
           style={{
-            ...inputBase,
-            appearance: "none",
-            WebkitAppearance: "none",
-            MozAppearance: "none",
-            paddingRight: 40,
+            fontSize: 15,
+            fontWeight: 900,
+            color: THEME.text,
+            letterSpacing: "-0.02em",
           }}
         >
-          {options.map((option) => (
-            <option
-              key={option}
-              value={option}
-              style={{ background: "#08111B", color: "#F5FAFF" }}
-            >
-              {option}
-            </option>
-          ))}
-        </select>
+          {title}
+        </div>
 
-        <ChevronDown
-          size={14}
-          strokeWidth={2.4}
-          color={THEME.textMuted}
+        <div
           style={{
-            position: "absolute",
-            right: 12,
-            top: "50%",
-            transform: "translateY(-50%)",
-            pointerEvents: "none",
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.10em",
+            textTransform: "uppercase",
+            color: THEME.emerald,
           }}
-        />
+        >
+          {countLabel}
+        </div>
+      </div>
+
+      <div style={{ padding: 14, display: "grid", gap: 8 }}>
+        {items.map((item) => (
+          <div
+            key={item}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: 10,
+              alignItems: "start",
+              fontSize: 13,
+              color: THEME.textSoft,
+            }}
+          >
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 999,
+                background: THEME.emeraldSoft,
+                border: `1px solid ${THEME.emeraldLine}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginTop: 1,
+              }}
+            >
+              <CheckCircle2 size={12} color={THEME.emerald} />
+            </div>
+            <div>{item}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function SummaryTile({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function ReadinessRow({ item }: { item: ReadinessItem }) {
+  const tone = getToneTokens(item.tone);
+
   return (
     <div
       style={{
-        borderRadius: "14px",
-        border: `1px solid ${THEME.lineSoft}`,
-        background:
-          "linear-gradient(180deg, rgba(8,16,27,0.78) 0%, rgba(5,12,20,0.7) 100%)",
-        padding: "12px 12px",
+        borderRadius: 16,
+        border: `1px solid ${tone.line}`,
+        background: tone.soft,
+        padding: "11px 12px",
+        display: "grid",
+        gridTemplateColumns: "auto 1fr auto",
+        gap: 10,
+        alignItems: "center",
       }}
     >
       <div
         style={{
-          color: THEME.textMuted,
-          fontSize: "0.78rem",
-          fontWeight: 700,
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.86)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: `1px solid ${tone.line}`,
+        }}
+      >
+        {item.tone === "green" ? (
+          <CheckCircle2 size={13} color={tone.text} />
+        ) : (
+          <AlertCircle size={13} color={tone.text} />
+        )}
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 800,
+            color: THEME.textSoft,
+          }}
+        >
+          {item.label}
+        </div>
+        {item.detail ? (
+          <div
+            style={{
+              marginTop: 3,
+              fontSize: 12,
+              color: THEME.textMuted,
+            }}
+          >
+            {item.detail}
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          color: tone.text,
+          textAlign: "right",
+        }}
+      >
+        {item.status}
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({
+  label,
+  value,
+  tone,
+  dark,
+}: {
+  label: string;
+  value: string;
+  tone: StatusTone;
+  dark?: boolean;
+}) {
+  const tokens = getToneTokens(tone);
+
+  return (
+    <div
+      style={{
+        borderRadius: 16,
+        padding: "10px 12px",
+        border: dark ? "1px solid rgba(255,255,255,0.10)" : `1px solid ${tokens.line}`,
+        background: dark ? "rgba(255,255,255,0.04)" : tokens.soft,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: "0.10em",
           textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          marginBottom: "6px",
+          fontWeight: 800,
+          color: dark ? "rgba(218,230,243,0.66)" : THEME.textMuted,
         }}
       >
         {label}
       </div>
       <div
         style={{
-          color: THEME.text,
-          fontSize: "0.94rem",
+          marginTop: 5,
+          fontSize: 13,
           fontWeight: 800,
-          lineHeight: 1.35,
+          color: dark ? "#f7fbff" : tokens.text,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SummaryLine({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "110px 1fr",
+        gap: 10,
+        alignItems: "start",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          color: THEME.textMuted,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </div>
+
+      <div
+        style={{
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: THEME.textSoft,
+          fontFamily: mono ? "ui-monospace, SFMono-Regular, Menlo, monospace" : undefined,
           wordBreak: "break-word",
         }}
       >
@@ -1649,323 +1920,288 @@ function SummaryTile({
   );
 }
 
-function createLocalFallbackJob(form: FormState): LocalJobRecord {
-  const now = new Date().toISOString();
+function InfoStrip({
+  tone,
+  icon,
+  children,
+}: {
+  tone: "blue" | StatusTone;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  const tokens =
+    tone === "blue"
+      ? { soft: THEME.blueSoft, line: THEME.blueLine, text: THEME.blueStrong }
+      : getToneTokens(tone);
 
-  return {
-    id: `local-${Date.now()}`,
-    status: "New Intake",
-    assigned_to: null,
-    concern: form.concern.trim(),
-    notes: [
-      `Concern: ${form.concern.trim() || "N/A"}`,
-      `Requested Work: ${form.requestedWork.trim() || "N/A"}`,
-      `Internal Notes: ${form.notes.trim() || "N/A"}`,
-      `Mileage In: ${form.mileageIn.trim() || "N/A"}`,
-      `Diagnostic Fee: ${form.diagnosticFee.trim() || "N/A"}`,
-      `Written By: ${form.writtenBy.trim() || "N/A"}`,
-    ].join("\n"),
-    findings: "",
-    approval_state: "Not Requested",
-    created_at: now,
-    updated_at: now,
-    vehicles: {
-      year: form.year.trim(),
-      make: form.make.trim(),
-      model: form.model.trim(),
-      vin: form.vin.trim(),
-      plate: form.plate.trim() || null,
-      color: null,
-      customer_name: form.customerName.trim(),
-      customer_phone: form.phone.trim(),
-    },
-  };
+  return (
+    <div
+      style={{
+        borderRadius: 16,
+        border: `1px solid ${tokens.line}`,
+        background: tokens.soft,
+        padding: "10px 12px",
+        display: "grid",
+        gridTemplateColumns: "auto 1fr",
+        gap: 10,
+        alignItems: "start",
+        fontSize: 13,
+        lineHeight: 1.45,
+        color: THEME.textSoft,
+      }}
+    >
+      <div
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: tokens.text,
+          marginTop: 1,
+        }}
+      >
+        {icon}
+      </div>
+      <div>{children}</div>
+    </div>
+  );
 }
 
-function saveLocalJob(job: LocalJobRecord) {
-  if (typeof window === "undefined") return;
+function TinyStatus({ tone, text }: { tone: StatusTone; text: string }) {
+  const tokens = getToneTokens(tone);
 
-  const raw = window.localStorage.getItem(JOB_STORAGE_KEY);
-  const existing = raw ? JSON.parse(raw) : [];
-  const jobs = Array.isArray(existing) ? existing : [];
-
-  jobs.unshift(job);
-  window.localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(jobs));
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 800,
+        lineHeight: 1,
+        color: tokens.text,
+        padding: "5px 8px",
+        borderRadius: 999,
+        background: tokens.soft,
+        border: `1px solid ${tokens.line}`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {text}
+    </div>
+  );
 }
 
-function getReadableErrorMessage(error: unknown) {
-  if (!error) return "Failed to create job.";
-
-  if (typeof error === "string") return error;
-
-  if (error instanceof Error) {
-    return error.message || "Failed to create job.";
-  }
-
-  if (typeof error === "object") {
-    const candidate = error as {
-      message?: string;
-      error_description?: string;
-      details?: string;
-      hint?: string;
-      code?: string;
-    };
-
-    const parts = [
-      candidate.message,
-      candidate.error_description,
-      candidate.details,
-      candidate.hint,
-      candidate.code,
-    ].filter(Boolean);
-
-    if (parts.length) {
-      return parts.join(" | ");
-    }
-  }
-
-  return "Failed to create job.";
+function RequiredPill() {
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        letterSpacing: "0.10em",
+        textTransform: "uppercase",
+        fontWeight: 900,
+        color: THEME.blueStrong,
+        background: THEME.blueSoft,
+        border: `1px solid ${THEME.blueLine}`,
+        padding: "4px 7px",
+        borderRadius: 999,
+        lineHeight: 1,
+      }}
+    >
+      Required
+    </div>
+  );
 }
 
-function twoColGrid(isMobile: boolean): CSSProperties {
+function CameraGlyph() {
+  return (
+    <div
+      style={{
+        width: 15,
+        height: 15,
+        borderRadius: 4,
+        border: `1.5px solid ${THEME.emerald}`,
+        position: "relative",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          width: 5,
+          height: 5,
+          borderRadius: 999,
+          border: `1.5px solid ${THEME.emerald}`,
+          top: 3,
+          left: 4,
+          boxSizing: "border-box",
+        }}
+      />
+    </div>
+  );
+}
+
+function fieldGridStyle(isMobile: boolean): CSSProperties {
   return {
     display: "grid",
-    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
+    gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+    gap: 12,
+    alignItems: "start",
   };
 }
 
-function toneColor(tone: StatusTone) {
+function logoShieldStyle(): CSSProperties {
+  return {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    border: THEME.cardBorder,
+    background: "rgba(255,255,255,0.80)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.76)",
+    flexShrink: 0,
+  };
+}
+
+function iconButtonStyle(): CSSProperties {
+  return {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    border: THEME.cardBorder,
+    background: "rgba(255,255,255,0.78)",
+    color: THEME.text,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    boxShadow: THEME.cardShadow,
+  };
+}
+
+function ghostButtonStyle(): CSSProperties {
+  return {
+    height: 40,
+    borderRadius: 12,
+    border: THEME.cardBorder,
+    background: "rgba(255,255,255,0.78)",
+    color: THEME.text,
+    padding: "0 14px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    fontSize: 13,
+    fontWeight: 800,
+    cursor: "pointer",
+    boxShadow: THEME.cardShadow,
+  };
+}
+
+function primaryGhostButtonStyle(disabled: boolean): CSSProperties {
+  return {
+    height: 46,
+    borderRadius: 14,
+    border: `1px solid ${THEME.blueLine}`,
+    background: disabled
+      ? "linear-gradient(180deg, rgba(37,99,235,0.04) 0%, rgba(37,99,235,0.02) 100%)"
+      : "linear-gradient(180deg, rgba(37,99,235,0.10) 0%, rgba(37,99,235,0.06) 100%)",
+    color: disabled ? "#7c90a5" : THEME.blueStrong,
+    padding: "0 16px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    fontSize: 13,
+    fontWeight: 900,
+    cursor: disabled ? "not-allowed" : "pointer",
+    boxShadow: disabled ? "none" : `0 8px 18px ${THEME.blueGlow}`,
+  };
+}
+
+function primaryButtonStyle(): CSSProperties {
+  return {
+    minHeight: 50,
+    borderRadius: 14,
+    border: "1px solid rgba(29,78,216,0.36)",
+    background: THEME.buttonBlue,
+    color: "#ffffff",
+    padding: "0 16px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    fontSize: 14,
+    fontWeight: 900,
+    cursor: "pointer",
+    boxShadow: "0 12px 28px rgba(37,99,235,0.22)",
+  };
+}
+
+function inputStyle(hasSelectArrow?: boolean): CSSProperties {
+  return {
+    width: "100%",
+    minHeight: 46,
+    borderRadius: 14,
+    border: THEME.inputBorder,
+    background: THEME.input,
+    color: THEME.text,
+    padding: hasSelectArrow ? "0 38px 0 14px" : "0 14px",
+    fontSize: 14,
+    outline: "none",
+    boxShadow: THEME.inputInset,
+    appearance: hasSelectArrow ? "none" : undefined,
+    WebkitAppearance: hasSelectArrow ? "none" : undefined,
+  };
+}
+
+function errorBoxStyle(): CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: 10,
+    alignItems: "start",
+    borderRadius: 16,
+    border: `1px solid ${THEME.redLine}`,
+    background: THEME.redSoft,
+    padding: "11px 12px",
+    color: "#8c1d1d",
+    fontSize: 13,
+    lineHeight: 1.45,
+  };
+}
+
+function getToneTokens(tone: StatusTone) {
   if (tone === "green") {
     return {
-      text: THEME.emerald,
       soft: THEME.emeraldSoft,
       line: THEME.emeraldLine,
+      text: THEME.emerald,
     };
   }
 
   if (tone === "yellow") {
     return {
-      text: THEME.yellow,
       soft: THEME.yellowSoft,
       line: THEME.yellowLine,
+      text: THEME.yellow,
     };
   }
 
   return {
-    text: THEME.red,
     soft: THEME.redSoft,
     line: THEME.redLine,
+    text: THEME.red,
   };
 }
 
-function evaluateCustomerName(value: string): FieldState {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Required for intake.",
-    };
-  }
-
-  const parts = trimmed.split(/\s+/).filter(Boolean);
-
-  if (parts.length < 2) {
-    return {
-      tone: "yellow",
-      status: "Partial",
-      hint: "Enter first and last name.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
+function normalizeVinStrict(value: string) {
+  return value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, "").slice(0, 17);
 }
 
-function evaluateAddress(value: string): FieldState {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Required for intake.",
-    };
-  }
-
-  if (trimmed.length < 8) {
-    return {
-      tone: "yellow",
-      status: "Partial",
-      hint: "Enter the customer's full address.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluatePhone(value: string): FieldState {
-  const digits = value.replace(/\D/g, "");
-
-  if (!digits) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Required for intake.",
-    };
-  }
-
-  if (digits.length < 10) {
-    return {
-      tone: "yellow",
-      status: "Partial",
-      hint: "Enter a 10-digit phone number.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluateVin(value: string): FieldState {
-  if (!value.trim()) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Required for intake.",
-    };
-  }
-
-  if (!isValidVin(value.trim())) {
-    return {
-      tone: "yellow",
-      status: "Review",
-      hint: "Enter the 17-character VIN.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluateVehicleIdentity(
-  year: string,
-  make: string,
-  model: string
-): FieldState {
-  const count = [year, make, model].filter((item) => item.trim()).length;
-
-  if (count === 0) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Add year, make, and model.",
-    };
-  }
-
-  if (count < 3) {
-    return {
-      tone: "yellow",
-      status: "Partial",
-      hint: "Add year, make, and model.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluateMileage(value: string): FieldState {
-  if (!value.trim()) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Mileage in is required.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluateConcern(value: string): FieldState {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Required for intake.",
-    };
-  }
-
-  if (trimmed.length < 8) {
-    return {
-      tone: "yellow",
-      status: "Partial",
-      hint: "Add enough detail for intake.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluateDiagnosticFee(value: string): FieldState {
-  const numeric = parseFloat(value.replace(/,/g, ""));
-
-  if (!value.trim()) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Diagnostic fee is required.",
-    };
-  }
-
-  if (Number.isNaN(numeric) || numeric <= 0) {
-    return {
-      tone: "yellow",
-      status: "Review",
-      hint: "Enter a valid diagnostic fee.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
-}
-
-function evaluateWrittenBy(value: string): FieldState {
-  if (!value.trim()) {
-    return {
-      tone: "red",
-      status: "Missing",
-      hint: "Written by is required.",
-    };
-  }
-
-  return {
-    tone: "green",
-    status: "Ready",
-  };
+function isValidVin(value: string) {
+  return /^[A-HJ-NPR-Z0-9]{17}$/.test(normalizeVinStrict(value));
 }
 
 function formatPhone(value: string) {
@@ -1979,130 +2215,348 @@ function formatPhone(value: string) {
 function formatMileage(value: string) {
   const digits = value.replace(/\D/g, "");
   if (!digits) return "";
-  return Number(digits).toLocaleString("en-US");
+  return Number(digits).toLocaleString();
 }
 
 function formatMoneyInput(value: string) {
   const cleaned = value.replace(/[^\d.]/g, "");
   const parts = cleaned.split(".");
-  const whole = parts[0] || "";
-  const decimal = parts[1] ? parts[1].slice(0, 2) : "";
-  return decimal ? `${whole}.${decimal}` : whole;
-}
 
-function digitsOnly(value: string) {
-  return value.replace(/\D/g, "");
-}
-
-function normalizeVinStrict(value: string) {
-  return value
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .replace(/[IOQ]/g, "")
-    .slice(0, 17);
-}
-
-function isValidVin(value: string) {
-  return /^[A-HJ-NPR-Z0-9]{17}$/.test(value);
-}
-
-async function decodeVinViaAppRoute(
-  vin: string,
-  modelYear?: string
-): Promise<VehicleDecode> {
-  const cleanVin = normalizeVinStrict(vin);
-
-  if (!isValidVin(cleanVin)) {
-    throw new Error("VIN decode could not run because the VIN is invalid.");
+  if (parts.length === 1) {
+    return parts[0];
   }
 
-  const response = await fetch("/api/vin-decode", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      vin: cleanVin,
-      modelYear: modelYear?.trim() || "",
-    }),
-  });
+  const dollars = parts[0];
+  const cents = parts.slice(1).join("").slice(0, 2);
 
-  const payload = await response.json().catch(() => null);
+  return `${dollars}.${cents}`;
+}
 
-  if (!response.ok || !payload?.success) {
-    throw new Error(payload?.message || "VIN decode failed.");
+function evaluateCustomerName(value: string): FieldState {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "The intake record needs the customer’s name attached to it.",
+    };
+  }
+
+  if (trimmed.length < 4) {
+    return {
+      tone: "yellow",
+      status: "Looks short",
+      hint: "Use the customer’s full name when possible.",
+    };
   }
 
   return {
-    year: String(payload?.year ?? "").trim(),
-    make: String(payload?.make ?? "").trim(),
-    model: String(payload?.model ?? "").trim(),
+    tone: "green",
+    status: "Ready",
+    hint: "Customer identity is attached to this intake.",
   };
 }
 
-const fieldLabel: CSSProperties = {
-  fontSize: "0.77rem",
-  fontWeight: 800,
-  color: THEME.text,
-  textTransform: "uppercase",
-  letterSpacing: "0.08em",
-  marginBottom: "6px",
-};
+function evaluateAddress(value: string): FieldState {
+  const trimmed = value.trim();
 
-const miniLabel: CSSProperties = {
-  ...fieldLabel,
-  marginBottom: "8px",
-};
+  if (!trimmed) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "Address strengthens customer identity for the record.",
+    };
+  }
 
-const inputBase: CSSProperties = {
-  width: "100%",
-  borderRadius: "14px",
-  background:
-    "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(4,10,18,1) 100%)",
-  color: THEME.text,
-  padding: "13px 14px",
-  fontSize: "0.95rem",
-  outline: "none",
-  boxSizing: "border-box",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
-};
+  if (trimmed.length < 8) {
+    return {
+      tone: "yellow",
+      status: "Looks incomplete",
+      hint: "Street, city, state, and ZIP is preferred.",
+    };
+  }
 
-const validationRow: CSSProperties = {
-  marginTop: "7px",
-  display: "flex",
-  alignItems: "center",
-  gap: "6px",
-  color: THEME.red,
-  fontSize: "0.8rem",
-  fontWeight: 700,
-};
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "Customer address is documented.",
+  };
+}
 
-const ghostButton: CSSProperties = {
-  border: `1px solid ${THEME.lineSoft}`,
-  background:
-    "linear-gradient(180deg, rgba(10,20,33,0.92) 0%, rgba(7,13,22,0.96) 100%)",
-  color: THEME.text,
-  borderRadius: "14px",
-  padding: "11px 14px",
-  fontSize: "0.9rem",
-  fontWeight: 800,
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-};
+function evaluatePhone(value: string): FieldState {
+  const digits = value.replace(/\D/g, "");
 
-const primaryButton: CSSProperties = {
-  border: "1px solid rgba(89,155,255,0.8)",
-  background: THEME.buttonBlue,
-  color: "#F7FBFF",
-  borderRadius: "14px",
-  padding: "11px 14px",
-  fontSize: "0.9rem",
-  fontWeight: 800,
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-  boxShadow: "0 10px 24px rgba(29,107,229,0.28)",
-};
+  if (!digits) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "A phone number is needed for contact and later authorization steps.",
+    };
+  }
+
+  if (digits.length < 10) {
+    return {
+      tone: "yellow",
+      status: "Incomplete",
+      hint: "Use a full 10-digit phone number.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "Phone number is ready for contact and signature flow later.",
+  };
+}
+
+function evaluateVin(value: string): FieldState {
+  const cleanVin = normalizeVinStrict(value);
+
+  if (!cleanVin) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "The intake record should be tied to a specific vehicle identity.",
+    };
+  }
+
+  if (cleanVin.length < 17) {
+    return {
+      tone: "yellow",
+      status: "Incomplete",
+      hint: "VIN must be 17 valid characters.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "VIN is complete and can be decoded or saved.",
+  };
+}
+
+function evaluateVehicleIdentity(year: string, make: string, model: string): FieldState {
+  const y = year.trim();
+  const mk = make.trim();
+  const md = model.trim();
+
+  if (!y || !mk || !md) {
+    return {
+      tone: "yellow",
+      status: "Fill missing identity fields",
+      hint: "Year, make, and model should all be confirmed at intake.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "Vehicle identity is confirmed for this intake.",
+  };
+}
+
+function evaluateMileage(value: string): FieldState {
+  const digits = value.replace(/\D/g, "");
+
+  if (!digits) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "Mileage in should be documented at drop-off.",
+    };
+  }
+
+  if (digits.length < 2) {
+    return {
+      tone: "yellow",
+      status: "Looks incomplete",
+      hint: "Confirm the actual odometer reading.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "Mileage in is documented for the intake record.",
+  };
+}
+
+function evaluateConcern(value: string): FieldState {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "Document the customer’s concern before intake is created.",
+    };
+  }
+
+  if (trimmed.length < 8) {
+    return {
+      tone: "yellow",
+      status: "Needs more detail",
+      hint: "Add enough detail to identify what the shop is evaluating.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "The customer’s concern is documented for this intake.",
+  };
+}
+
+function evaluateDiagnosticFee(value: string): FieldState {
+  const amount = Number.parseFloat(value);
+
+  if (!value.trim()) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "Diagnostic fee should be recorded at intake.",
+    };
+  }
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    return {
+      tone: "yellow",
+      status: "Check amount",
+      hint: "Enter a valid dollar amount.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "Diagnostic fee is documented.",
+  };
+}
+
+function evaluateWrittenBy(value: string): FieldState {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      tone: "red",
+      status: "Required",
+      hint: "The intake record must show who created it.",
+    };
+  }
+
+  return {
+    tone: "green",
+    status: "Ready",
+    hint: "Writer attribution is recorded.",
+  };
+}
+
+async function decodeVinViaAppRoute(vin: string, year?: string): Promise<VehicleDecode> {
+  const params = new URLSearchParams({ vin });
+  if (year) {
+    params.set("year", year);
+  }
+
+  const response = await fetch(`/api/vin-decode?${params.toString()}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`VIN decode failed with status ${response.status}`);
+  }
+
+  const data = (await response.json()) as Partial<VehicleDecode> & {
+    vehicle?: Partial<VehicleDecode>;
+  };
+
+  return {
+    year: String(data.year || data.vehicle?.year || "").trim(),
+    make: String(data.make || data.vehicle?.make || "").trim(),
+    model: String(data.model || data.vehicle?.model || "").trim(),
+  };
+}
+
+function createLocalFallbackJob(form: FormState): LocalJobRecord {
+  const now = new Date().toISOString();
+  const id = `local-${Date.now()}`;
+
+  const notes = [
+    "SHOPPROOF INTAKE SNAPSHOT",
+    `Customer Address: ${form.customerAddress.trim() || "N/A"}`,
+    `Customer Email: ${form.email.trim() || "N/A"}`,
+    `Mileage In: ${form.mileageIn.trim() || "N/A"}`,
+    `Requested Work: ${form.requestedWork.trim() || "N/A"}`,
+    `Internal Notes: ${form.notes.trim() || "N/A"}`,
+    `Diagnostic Fee: ${form.diagnosticFee.trim() || "N/A"}`,
+    `Written By: ${form.writtenBy.trim() || "N/A"}`,
+    "Required Drop-Off Photos:",
+    "- Exterior x4",
+    "- Wheels x4",
+    "- Interior x3 (seat/console, door panel, dash/odometer)",
+  ].join("\n");
+
+  return {
+    id,
+    shop_id: null,
+    customer_id: null,
+    vehicle_id: null,
+    status: "New Intake",
+    approval_state: "Not Requested",
+    concern: form.concern.trim(),
+    notes,
+    findings: "",
+    assigned_to: null,
+    created_at: now,
+    updated_at: now,
+    customer_name: form.customerName.trim(),
+    customer_phone: form.phone.trim(),
+    customer_email: form.email.trim() || null,
+    customer_address: form.customerAddress.trim(),
+    vehicles: {
+      year: form.year.trim(),
+      make: form.make.trim(),
+      model: form.model.trim(),
+      vin: normalizeVinStrict(form.vin),
+      plate: form.plate.trim().toUpperCase() || null,
+      color: null,
+      customer_name: form.customerName.trim(),
+      customer_phone: form.phone.trim(),
+      mileage_in: form.mileageIn.trim() || null,
+    },
+  };
+}
+
+function saveLocalJob(job: LocalJobRecord) {
+  const existing = readLocalJobs();
+  const next = [job, ...existing];
+  localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(next));
+}
+
+function readLocalJobs(): LocalJobRecord[] {
+  try {
+    const raw = localStorage.getItem(JOB_STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as LocalJobRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function getReadableErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  return "Create failed due to an unexpected error.";
+}

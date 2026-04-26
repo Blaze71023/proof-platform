@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import PlatformNav from "@/components/ui/PlatformNav";
+import "./globals.css";
 
 export default function RootLayout({
   children,
@@ -16,8 +16,6 @@ export default function RootLayout({
           background: "#061018",
         }}
       >
-        <PlatformNav />
-
         {children}
       </body>
     </html>

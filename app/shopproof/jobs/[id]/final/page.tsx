@@ -1,1602 +1,1444 @@
+```tsx
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { getJobs, updateJob } from "@/lib/shopproof";
 
-type FinalPhoto = {
-  id: string;
-  name: string;
-  url: string;
-  addedAt: string;
-};
+type AnyJob = any;
 
-type FinalChecklist = {
-  allWorkCompleted: boolean;
-  vehicleRoadTested: boolean;
-  noToolsLeftInside: boolean;
-  fluidsChecked: boolean;
-  warningLightsReviewed: boolean;
-  finalConditionPhotosTaken: boolean;
-  customerItemsReturned: boolean;
-};
+const PAGE_BG =
+  "linear-gradient(180deg, #e8eef5 0%, #dfe7f0 42%, #d8e1eb 100%)";
+const SHELL_BG =
+  "linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(244,248,252,0.96) 100%)";
+const PANEL_BG =
+  "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,252,0.98) 100%)";
+const ACCENT_PANEL_BG =
+  "linear-gradient(180deg, rgba(239,246,255,0.96) 0%, rgba(248,250,252,0.98) 100%)";
+const SUCCESS_PANEL_BG =
+  "linear-gradient(180deg, rgba(236,253,245,0.96) 0%, rgba(248,250,252,0.98) 100%)";
+const STATUS_BAND_BG =
+  "linear-gradient(135deg, #142235 0%, #1d334d 48%, #244463 100%)";
 
-type FinalState = {
-  readyForPickup: boolean;
-  completed: boolean;
-  finalMileageOut: string;
-  finalSummary: string;
-  customerFacingNotes: string;
-  internalCloseoutNotes: string;
-  completedBy: string;
-  completedAt: string;
-  checklist: FinalChecklist;
-  photos: FinalPhoto[];
-};
+const SOFT_BORDER = "1px solid rgba(71,85,105,0.14)";
+const PANEL_BORDER = "1px solid rgba(71,85,105,0.12)";
 
-const EMPTY_FINAL: FinalState = {
-  readyForPickup: false,
-  completed: false,
-  finalMileageOut: "",
-  finalSummary: "",
-  customerFacingNotes: "",
-  internalCloseoutNotes: "",
-  completedBy: "",
-  completedAt: "",
-  checklist: {
-    allWorkCompleted: false,
-    vehicleRoadTested: false,
-    noToolsLeftInside: false,
-    fluidsChecked: false,
-    warningLightsReviewed: false,
-    finalConditionPhotosTaken: false,
-    customerItemsReturned: false,
-  },
-  photos: [],
-};
+const TEXT_MAIN = "#0f172a";
+const TEXT_SOFT = "#334155";
+const TEXT_MUTED = "#64748b";
 
-function isObject(value: unknown): value is Record<string, any> {
-  return typeof value === "object" && value !== null;
+const BLUE = "#2563eb";
+const BLUE_SOFT = "rgba(219,234,254,0.86)";
+
+const EMERALD = "#059669";
+const EMERALD_SOFT = "#d1fae5";
+
+const AMBER = "#d97706";
+const AMBER_SOFT = "#fef3c7";
+
+const RED = "#dc2626";
+const RED_SOFT = "#fee2e2";
+
+function formatMoney(value: any) {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = Number(value);
+  if (!Number.isNaN(num)) return `$${num.toFixed(2)}`;
+  return `$${value}`;
 }
 
-function safeString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
-function safeBoolean(value: unknown, fallback = false): boolean {
-  return typeof value === "boolean" ? value : fallback;
-}
-
-function normalizePhotos(value: unknown): FinalPhoto[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .map((item, index) => {
-      if (!isObject(item)) return null;
-
-      const url =
-        safeString(item.url) ||
-        safeString(item.preview) ||
-        safeString(item.src) ||
-        safeString(item.dataUrl);
-
-      if (!url) return null;
-
-      return {
-        id: safeString(item.id) || `final-photo-${index + 1}`,
-        name: safeString(item.name) || `Final Photo ${index + 1}`,
-        url,
-        addedAt: safeString(item.addedAt) || new Date().toISOString(),
-      };
-    })
-    .filter(Boolean) as FinalPhoto[];
-}
-
-function normalizeFinalState(job: any): FinalState {
-  const rawFinal = isObject(job?.final) ? job.final : {};
-  const rawChecklist = isObject(rawFinal.checklist) ? rawFinal.checklist : {};
-
-  const photos = normalizePhotos(rawFinal.photos);
-
-  return {
-    readyForPickup:
-      safeBoolean(rawFinal.readyForPickup) ||
-      safeString(job?.status) === "Ready for Pickup",
-    completed:
-      safeBoolean(rawFinal.completed) || safeString(job?.status) === "Completed",
-    finalMileageOut: safeString(rawFinal.finalMileageOut),
-    finalSummary: safeString(rawFinal.finalSummary),
-    customerFacingNotes: safeString(rawFinal.customerFacingNotes),
-    internalCloseoutNotes: safeString(rawFinal.internalCloseoutNotes),
-    completedBy: safeString(rawFinal.completedBy),
-    completedAt: safeString(rawFinal.completedAt),
-    checklist: {
-      allWorkCompleted: safeBoolean(rawChecklist.allWorkCompleted),
-      vehicleRoadTested: safeBoolean(rawChecklist.vehicleRoadTested),
-      noToolsLeftInside: safeBoolean(rawChecklist.noToolsLeftInside),
-      fluidsChecked: safeBoolean(rawChecklist.fluidsChecked),
-      warningLightsReviewed: safeBoolean(rawChecklist.warningLightsReviewed),
-      finalConditionPhotosTaken:
-        safeBoolean(rawChecklist.finalConditionPhotosTaken) || photos.length > 0,
-      customerItemsReturned: safeBoolean(rawChecklist.customerItemsReturned),
-    },
-    photos,
-  };
-}
-
-function getCustomerName(job: any): string {
-  return (
-    safeString(job?.customerName) ||
-    safeString(job?.customer?.name) ||
-    safeString(job?.customer_full_name) ||
-    "Unknown Customer"
-  );
-}
-
-function getVehicleLine(job: any): string {
-  const year =
-    safeString(job?.vehicleYear) ||
-    safeString(job?.vehicle?.year) ||
-    safeString(job?.year);
-  const make =
-    safeString(job?.vehicleMake) ||
-    safeString(job?.vehicle?.make) ||
-    safeString(job?.make);
-  const model =
-    safeString(job?.vehicleModel) ||
-    safeString(job?.vehicle?.model) ||
-    safeString(job?.model);
-
-  const assembled = [year, make, model].filter(Boolean).join(" ").trim();
-  return assembled || "Unknown Vehicle";
-}
-
-function getVin(job: any): string {
-  return (
-    safeString(job?.vin) ||
-    safeString(job?.vehicleVin) ||
-    safeString(job?.vehicle?.vin) ||
-    "—"
-  );
-}
-
-function getPlate(job: any): string {
-  return (
-    safeString(job?.plate) ||
-    safeString(job?.vehiclePlate) ||
-    safeString(job?.vehicle?.plate) ||
-    "—"
-  );
-}
-
-function getConcern(job: any): string {
-  return (
-    safeString(job?.concern) ||
-    safeString(job?.customerConcern) ||
-    safeString(job?.requestedWork) ||
-    safeString(job?.complaint) ||
-    "No concern recorded."
-  );
-}
-
-function getAssignedTech(job: any): string {
-  return (
-    safeString(job?.assignedTech) ||
-    safeString(job?.assigned_to) ||
-    safeString(job?.technician) ||
-    safeString(job?.advisor) ||
-    "Unassigned"
-  );
-}
-
-function getCreatedAt(job: any): string {
-  return safeString(job?.createdAt) || safeString(job?.created_at);
-}
-
-function formatDateTime(value: string): string {
+function formatDateTime(value: any) {
   if (!value) return "—";
-
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
+  if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString();
 }
 
-function toDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Could not read file."));
-      }
-    };
-
-    reader.onerror = () => reject(new Error("Could not read file."));
-    reader.readAsDataURL(file);
-  });
+function asArray<T = any>(value: any): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
-export default function ShopProofFinalPage() {
+function cleanStatus(value: any) {
+  if (!value) return "Pending";
+  return String(value)
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export default function FinalPage() {
   const params = useParams();
-  const router = useRouter();
+  const id = params?.id as string;
 
-  const jobId = Array.isArray(params?.id) ? params.id[0] : params?.id || "";
-
-  const [job, setJob] = useState<any | null>(null);
-  const [finalState, setFinalState] = useState<FinalState>(EMPTY_FINAL);
+  const [job, setJob] = useState<AnyJob | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [saveMessage, setSaveMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const [releaseName, setReleaseName] = useState("");
+  const [releaseNotes, setReleaseNotes] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const jobs = getJobs();
-    const found = jobs.find((item: any) => String(item?.id) === String(jobId));
-
-    if (!found) {
+    if (!id) {
       setJob(null);
       setLoading(false);
       return;
     }
 
+    const jobs = getJobs();
+    const found =
+      jobs.find((item: AnyJob) => String(item?.id) === String(id)) || null;
+
     setJob(found);
-    setFinalState(normalizeFinalState(found));
     setLoading(false);
-  }, [jobId]);
+  }, [id]);
 
-  const completionScore = useMemo(() => {
-    const checks = Object.values(finalState.checklist);
-    const total = checks.length;
-    const completedChecks = checks.filter(Boolean).length;
+  const vehicleLabel = useMemo(() => {
+    if (!job?.vehicle) return "Vehicle record";
+    const year = job.vehicle.year || "";
+    const make = job.vehicle.make || "";
+    const model = job.vehicle.model || "";
+    return [year, make, model].filter(Boolean).join(" ") || "Vehicle record";
+  }, [job]);
 
-    const textFields = [
-      finalState.finalMileageOut.trim(),
-      finalState.finalSummary.trim(),
-      finalState.customerFacingNotes.trim(),
-    ];
-    const textScore = textFields.filter(Boolean).length;
+  const customerName = useMemo(() => {
+    if (!job?.customer) return "Customer";
+    const first = job.customer.firstName || "";
+    const last = job.customer.lastName || "";
+    const full = [first, last].filter(Boolean).join(" ").trim();
+    return full || job.customer.name || "Customer";
+  }, [job]);
 
-    const score = Math.round(
-      ((completedChecks + textScore) / (total + textFields.length)) * 100
-    );
+  const concernText =
+    job?.visit?.concern ||
+    job?.concern ||
+    "No concern was entered on this record.";
 
-    return score;
-  }, [finalState]);
+  const diagnosticsFee =
+    job?.authorization?.diagnosticsFee ??
+    job?.visit?.diagnosticsFee ??
+    job?.intake?.diagnosticsFee ??
+    null;
 
-  const canMarkReady =
-    finalState.checklist.allWorkCompleted &&
-    finalState.checklist.finalConditionPhotosTaken &&
-    finalState.photos.length > 0 &&
-    finalState.finalMileageOut.trim().length > 0 &&
-    finalState.finalSummary.trim().length > 0;
+  const findingsList = useMemo(() => {
+    if (!job?.findings) return [];
+    if (Array.isArray(job.findings)) return job.findings;
+    if (
+      job.findings.notes ||
+      job.findings.summary ||
+      job.findings.title ||
+      job.findings.finding
+    ) {
+      return [job.findings];
+    }
+    return [];
+  }, [job]);
 
-  const canComplete = canMarkReady && finalState.customerFacingNotes.trim().length > 0;
+  const partsList = useMemo(() => {
+    return [
+      ...asArray(job?.estimate?.parts),
+      ...asArray(job?.approval?.parts),
+      ...asArray(job?.workOrder?.parts),
+    ].filter(Boolean);
+  }, [job]);
 
-  function updateChecklistField(key: keyof FinalChecklist, value: boolean) {
-    setFinalState((current) => ({
-      ...current,
-      checklist: {
-        ...current.checklist,
-        [key]: value,
-      },
-    }));
-    setSaveMessage("");
-  }
+  const laborList = useMemo(() => {
+    return [
+      ...asArray(job?.estimate?.labor),
+      ...asArray(job?.approval?.labor),
+      ...asArray(job?.workOrder?.labor),
+    ].filter(Boolean);
+  }, [job]);
 
-  function updateField<K extends keyof FinalState>(key: K, value: FinalState[K]) {
-    setFinalState((current) => ({
-      ...current,
-      [key]: value,
-    }));
-    setSaveMessage("");
-  }
+  const recommendedRepairs = useMemo(() => {
+    return [
+      ...asArray(job?.estimate?.recommendedRepairs),
+      ...asArray(job?.approval?.recommendedRepairs),
+      ...asArray(job?.workOrder?.recommendedRepairs),
+    ].filter(Boolean);
+  }, [job]);
 
-  async function saveFinalState(nextOverrides?: Partial<FinalState>, nextStatus?: string) {
+  const totals = useMemo(() => {
+    return {
+      parts:
+        job?.estimate?.partsTotal ??
+        job?.approval?.partsTotal ??
+        job?.workOrder?.partsTotal ??
+        job?.totals?.parts ??
+        null,
+      labor:
+        job?.estimate?.laborTotal ??
+        job?.approval?.laborTotal ??
+        job?.workOrder?.laborTotal ??
+        job?.totals?.labor ??
+        null,
+      total:
+        job?.estimate?.total ??
+        job?.approval?.total ??
+        job?.workOrder?.total ??
+        job?.totals?.total ??
+        job?.final?.total ??
+        null,
+    };
+  }, [job]);
+
+  const mileageIn = job?.vehicle?.mileageIn || job?.visit?.mileageIn || "—";
+  const mileageOut =
+    job?.final?.mileageOut ||
+    job?.release?.mileageOut ||
+    job?.vehicle?.mileageOut ||
+    "—";
+
+  const authStatus = job?.authorization?.authorizationStatus || "pending";
+  const releaseStatus =
+    job?.release?.releaseStatus || job?.final?.finalStatus || "awaiting_release";
+
+  const handleSubmit = () => {
     if (!job) return;
 
-    const mergedFinal: FinalState = {
-      ...finalState,
-      ...nextOverrides,
-      checklist: {
-        ...finalState.checklist,
-        ...(nextOverrides?.checklist || {}),
-      },
-      photos: nextOverrides?.photos || finalState.photos,
-    };
+    if (!releaseName.trim()) {
+      setError("Please enter the customer's name to complete final release.");
+      return;
+    }
 
-    const payload: any = {
+    const now = new Date().toISOString();
+    const existingFinal = job.final || {};
+    const existingRelease = job.release || {};
+
+    const updated = {
       ...job,
-      final: mergedFinal,
-    };
-
-    if (nextStatus) {
-      payload.status = nextStatus;
-    } else if (mergedFinal.completed) {
-      payload.status = "Completed";
-    } else if (mergedFinal.readyForPickup) {
-      payload.status = "Ready for Pickup";
-    }
-
-    try {
-      setSaving(true);
-      setErrorMessage("");
-      updateJob(payload);
-      setJob(payload);
-      setFinalState(mergedFinal);
-      setSaveMessage("Final page saved.");
-    } catch (error) {
-      console.error(error);
-      setErrorMessage("Could not save final page.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-
-    try {
-      setUploading(true);
-      setErrorMessage("");
-
-      const newPhotos: FinalPhoto[] = [];
-
-      for (const file of files) {
-        const url = await toDataUrl(file);
-
-        newPhotos.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-          name: file.name,
-          url,
-          addedAt: new Date().toISOString(),
-        });
-      }
-
-      const mergedPhotos = [...finalState.photos, ...newPhotos];
-      const nextFinal: FinalState = {
-        ...finalState,
-        photos: mergedPhotos,
-        checklist: {
-          ...finalState.checklist,
-          finalConditionPhotosTaken: mergedPhotos.length > 0,
-        },
-      };
-
-      await saveFinalState(nextFinal);
-      event.target.value = "";
-    } catch (error) {
-      console.error(error);
-      setErrorMessage("Could not add photos.");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function removePhoto(photoId: string) {
-    const remaining = finalState.photos.filter((photo) => photo.id !== photoId);
-
-    await saveFinalState({
-      ...finalState,
-      photos: remaining,
-      checklist: {
-        ...finalState.checklist,
-        finalConditionPhotosTaken: remaining.length > 0,
+      final: {
+        ...existingFinal,
+        finalStatus: "released",
+        releasedAt: now,
+        releasedByCustomerName: releaseName.trim(),
+        releaseNotes: releaseNotes.trim(),
+        releaseMethod: "digital_in_person",
+        mileageOut:
+          existingFinal.mileageOut ||
+          existingRelease.mileageOut ||
+          job?.vehicle?.mileageOut ||
+          "",
       },
-    });
-  }
-
-  async function markReadyForPickup() {
-    const nextFinal: FinalState = {
-      ...finalState,
-      readyForPickup: true,
-      completed: false,
-      completedAt: "",
+      release: {
+        ...existingRelease,
+        releaseStatus: "signed",
+        signatureName: releaseName.trim(),
+        signatureTimestamp: now,
+        signatureMethod: "digital",
+        notes: releaseNotes.trim(),
+        mileageOut:
+          existingRelease.mileageOut ||
+          existingFinal.mileageOut ||
+          job?.vehicle?.mileageOut ||
+          "",
+      },
     };
 
-    await saveFinalState(nextFinal, "Ready for Pickup");
-  }
-
-  async function markCompleted() {
-    const completedAt = new Date().toISOString();
-
-    const nextFinal: FinalState = {
-      ...finalState,
-      readyForPickup: true,
-      completed: true,
-      completedAt,
-    };
-
-    await saveFinalState(nextFinal, "Completed");
-  }
+    updateJob(updated);
+    setJob(updated);
+    setSubmitted(true);
+    setError("");
+  };
 
   if (loading) {
     return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background:
-            "linear-gradient(180deg, #02060B 0%, #030912 18%, #03101B 46%, #020912 76%, #02060B 100%)",
-          color: "#F5FAFF",
-          padding: "24px",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "1200px",
-            margin: "0 auto",
-            borderRadius: "24px",
-            border: "1px solid rgba(109, 142, 176, 0.22)",
-            background:
-              "linear-gradient(180deg, rgba(8,15,24,0.98) 0%, rgba(4,10,18,1) 100%)",
-            padding: "28px",
-          }}
-        >
-          Loading final condition…
+      <div style={pageStyle}>
+        <div style={centerWrapStyle}>
+          <div style={statusCardStyle}>
+            <div style={miniBrandStyle}>ShopPROOF Final Record</div>
+            <h2 style={statusTitleStyle}>Loading final release record...</h2>
+            <p style={statusTextStyle}>
+              Please wait while this vehicle record is prepared.
+            </p>
+          </div>
         </div>
-      </main>
+      </div>
     );
   }
 
   if (!job) {
     return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background:
-            "linear-gradient(180deg, #02060B 0%, #030912 18%, #03101B 46%, #020912 76%, #02060B 100%)",
-          color: "#F5FAFF",
-          padding: "24px",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "900px",
-            margin: "0 auto",
-            borderRadius: "24px",
-            border: "1px solid rgba(109, 142, 176, 0.22)",
-            background:
-              "linear-gradient(180deg, rgba(8,15,24,0.98) 0%, rgba(4,10,18,1) 100%)",
-            boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "22px 24px",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "0.82rem",
-                fontWeight: 800,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "rgba(215,229,240,0.7)",
-                marginBottom: "8px",
-              }}
-            >
-              ShopPROOF
-            </div>
-
-            <h1
-              style={{
-                margin: 0,
-                fontSize: "2rem",
-                lineHeight: 1.05,
-                letterSpacing: "-0.04em",
-                fontWeight: 900,
-              }}
-            >
-              Final Condition
-            </h1>
+      <div style={pageStyle}>
+        <div style={centerWrapStyle}>
+          <div style={statusCardStyle}>
+            <div style={invalidBadgeStyle}>Record unavailable</div>
+            <h1 style={statusTitleStyle}>Final release record not found</h1>
+            <p style={statusTextStyle}>
+              This vehicle record could not be located. Please open the final
+              page from a real ShopPROOF job record.
+            </p>
           </div>
+        </div>
+      </div>
+    );
+  }
 
-          <div style={{ padding: "24px" }}>
-            <div
-              style={{
-                borderRadius: "18px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(20,32,48,0.94) 0%, rgba(11,19,30,0.98) 100%)",
-                padding: "22px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "1.1rem",
-                  fontWeight: 800,
-                  marginBottom: "10px",
-                }}
-              >
-                Job not found
+  if (submitted) {
+    return (
+      <div style={pageStyle}>
+        <div style={centerWrapStyle}>
+          <div style={statusCardStyle}>
+            <div style={successBadgeStyle}>Final release saved</div>
+            <h1 style={statusTitleStyle}>Vehicle release recorded</h1>
+            <p style={statusTextStyle}>
+              The final release has been recorded to this ShopPROOF job. This
+              record now includes the customer release acknowledgment and final
+              documentation state.
+            </p>
+
+            <div style={summaryPanelStyle}>
+              <div style={summaryRowStyle}>
+                <span style={summaryLabelStyle}>Vehicle</span>
+                <span style={summaryValueStyle}>{vehicleLabel}</span>
               </div>
-
-              <p
-                style={{
-                  margin: 0,
-                  color: "rgba(215,229,240,0.78)",
-                  lineHeight: 1.6,
-                }}
-              >
-                We could not find a job for ID{" "}
-                <span style={{ color: "#78ABFF", fontWeight: 700 }}>
-                  {jobId || "unknown"}
+              <div style={summaryRowStyle}>
+                <span style={summaryLabelStyle}>Customer</span>
+                <span style={summaryValueStyle}>{customerName}</span>
+              </div>
+              <div style={summaryRowStyle}>
+                <span style={summaryLabelStyle}>Released by</span>
+                <span style={summaryValueStyle}>{releaseName.trim()}</span>
+              </div>
+              <div style={summaryRowLastStyle}>
+                <span style={summaryLabelStyle}>Recorded</span>
+                <span style={summaryValueStyle}>
+                  {formatDateTime(
+                    job?.release?.signatureTimestamp || job?.final?.releasedAt
+                  )}
                 </span>
-                .
-              </p>
-
-              <div style={{ marginTop: "18px" }}>
-                <button
-                  onClick={() => router.push("/shopproof/dashboard")}
-                  style={{
-                    border: "none",
-                    borderRadius: "12px",
-                    padding: "12px 16px",
-                    cursor: "pointer",
-                    fontWeight: 800,
-                    color: "#04111C",
-                    background:
-                      "linear-gradient(135deg, #7EE0FF 0%, #6AC2FF 48%, #90B7FF 100%)",
-                  }}
-                >
-                  Back to Dashboard
-                </button>
               </div>
             </div>
           </div>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(180deg, #02060B 0%, #030912 18%, #03101B 46%, #020912 76%, #02060B 100%)",
-        color: "#F5FAFF",
-        padding: "24px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1240px",
-          margin: "0 auto",
-          display: "grid",
-          gap: "18px",
-        }}
-      >
-        <section
-          style={{
-            borderRadius: "26px",
-            border: "1px solid rgba(109, 142, 176, 0.22)",
-            background:
-              "linear-gradient(180deg, rgba(7,15,25,0.985) 0%, rgba(5,12,20,0.995) 42%, rgba(3,9,15,1) 100%)",
-            boxShadow: "0 34px 90px rgba(0,0,0,0.5)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "20px 24px",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "14px",
-            }}
-          >
+    <div style={pageStyle}>
+      <div style={pageInnerStyle}>
+        <div style={shellStyle}>
+          <div style={headerStyle}>
             <div>
-              <div
-                style={{
-                  fontSize: "0.82rem",
-                  fontWeight: 800,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "rgba(215,229,240,0.72)",
-                  marginBottom: "8px",
-                }}
-              >
-                ShopPROOF • Final Condition
-              </div>
-
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: "2.15rem",
-                  lineHeight: 1.02,
-                  letterSpacing: "-0.045em",
-                  fontWeight: 900,
-                }}
-              >
-                {getVehicleLine(job)}
-              </h1>
-
-              <p
-                style={{
-                  margin: "10px 0 0",
-                  color: "rgba(215,229,240,0.78)",
-                  lineHeight: 1.55,
-                  maxWidth: "760px",
-                }}
-              >
-                Close out the job cleanly with final condition photos, customer-ready
-                notes, mileage out, and delivery status.
+              <div style={miniBrandStyle}>ShopPROOF Final Record</div>
+              <h1 style={pageTitleStyle}>Final Release & Vehicle Record</h1>
+              <p style={pageIntroStyle}>
+                Review the completed vehicle record, confirm the release
+                details, and capture the customer acknowledgment at vehicle
+                pickup.
               </p>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "10px",
-                justifyContent: "flex-end",
-              }}
-            >
-              <Link
-                href={`/shopproof/jobs/${jobId}`}
-                style={{
-                  textDecoration: "none",
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#EAF6FF",
-                  fontWeight: 800,
-                  background: "rgba(255,255,255,0.04)",
-                }}
-              >
-                Back to Job
-              </Link>
+            <div style={headerBadgeStyle}>Final release</div>
+          </div>
 
-              <Link
-                href={`/shopproof/sign/${job?.authorizationToken || job?.token || ""}`}
-                style={{
-                  textDecoration: "none",
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  border: "1px solid rgba(124, 190, 255, 0.25)",
-                  color: "#DFF3FF",
-                  fontWeight: 800,
-                  background:
-                    "linear-gradient(180deg, rgba(28,58,90,0.72) 0%, rgba(18,40,63,0.88) 100%)",
-                }}
-              >
-                Open Sign Flow
-              </Link>
+          <div style={statusBandStyle}>
+            <div style={statusBandItemStyle}>
+              <div style={statusBandLabelStyle}>Stage</div>
+              <div style={statusBandValueStyle}>Final Release</div>
+            </div>
 
-              <button
-                onClick={() => saveFinalState()}
-                disabled={saving}
-                style={{
-                  border: "none",
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  cursor: saving ? "default" : "pointer",
-                  fontWeight: 900,
-                  color: "#04111C",
-                  background:
-                    "linear-gradient(135deg, #7EE0FF 0%, #6AC2FF 45%, #90B7FF 100%)",
-                  opacity: saving ? 0.7 : 1,
-                }}
-              >
-                {saving ? "Saving..." : "Save Final Page"}
-              </button>
+            <div style={statusBandItemStyle}>
+              <div style={statusBandLabelStyle}>Authorization</div>
+              <div style={statusBandValueStyle}>{cleanStatus(authStatus)}</div>
+            </div>
+
+            <div style={statusBandItemStyle}>
+              <div style={statusBandLabelStyle}>Recorded Total</div>
+              <div style={statusBandValueStyle}>{formatMoney(totals.total)}</div>
+            </div>
+
+            <div style={statusBandItemLastStyle}>
+              <div style={statusBandLabelStyle}>Current State</div>
+              <div style={statusBandValueStyle}>{cleanStatus(releaseStatus)}</div>
             </div>
           </div>
 
-          <div
-            style={{
-              padding: "20px 24px",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: "12px",
-              borderBottom: "1px solid rgba(255,255,255,0.05)",
-            }}
-          >
-            {[
-              { label: "Job ID", value: String(job?.id || "—") },
-              { label: "Customer", value: getCustomerName(job) },
-              { label: "VIN", value: getVin(job) },
-              { label: "Plate", value: getPlate(job) },
-              { label: "Assigned", value: getAssignedTech(job) },
-              {
-                label: "Created",
-                value: formatDateTime(getCreatedAt(job)),
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  borderRadius: "16px",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  background:
-                    "linear-gradient(180deg, rgba(18,31,46,0.72) 0%, rgba(10,19,30,0.9) 100%)",
-                  padding: "14px 14px 12px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.72rem",
-                    fontWeight: 800,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    color: "rgba(215,229,240,0.6)",
-                    marginBottom: "8px",
-                  }}
-                >
-                  {item.label}
+          <div style={layoutStyle}>
+            <section style={mainColumnStyle}>
+              <div style={documentCardStyle}>
+                <div style={documentTopStyle}>
+                  <div>
+                    <div style={sectionEyebrowStyle}>Final vehicle record</div>
+                    <h2 style={documentTitleStyle}>{vehicleLabel}</h2>
+                  </div>
+
+                  <div style={awaitingBadgeStyle}>Awaiting release</div>
                 </div>
-                <div
-                  style={{
-                    fontWeight: 800,
-                    lineHeight: 1.35,
-                    color: "#F3FAFF",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {item.value}
-                </div>
-              </div>
-            ))}
-          </div>
 
-          <div
-            style={{
-              padding: "18px 24px 22px",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              gap: "12px",
-            }}
-          >
-            <div
-              style={{
-                borderRadius: "18px",
-                border: "1px solid rgba(107, 228, 171, 0.16)",
-                background:
-                  "linear-gradient(180deg, rgba(17,41,34,0.62) 0%, rgba(8,22,18,0.92) 100%)",
-                padding: "16px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.78rem",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  fontWeight: 800,
-                  color: "rgba(173,255,223,0.72)",
-                  marginBottom: "8px",
-                }}
-              >
-                Final Readiness
-              </div>
-              <div
-                style={{
-                  fontSize: "1.9rem",
-                  fontWeight: 900,
-                  letterSpacing: "-0.04em",
-                }}
-              >
-                {completionScore}%
-              </div>
-              <div
-                style={{
-                  marginTop: "8px",
-                  color: "rgba(220,245,235,0.76)",
-                  lineHeight: 1.45,
-                }}
-              >
-                Final wrap-up progress based on checklist, notes, and required closeout
-                fields.
-              </div>
-            </div>
+                <div style={infoGridStyle}>
+                  <div style={infoCardStyle}>
+                    <div style={infoLabelStyle}>Customer</div>
+                    <div style={infoValueStyle}>{customerName}</div>
+                  </div>
 
-            <div
-              style={{
-                borderRadius: "18px",
-                border: "1px solid rgba(120,171,255,0.18)",
-                background:
-                  "linear-gradient(180deg, rgba(20,36,63,0.7) 0%, rgba(10,18,31,0.94) 100%)",
-                padding: "16px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.78rem",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  fontWeight: 800,
-                  color: "rgba(176,208,255,0.72)",
-                  marginBottom: "8px",
-                }}
-              >
-                Job Status
-              </div>
-              <div
-                style={{
-                  fontSize: "1.1rem",
-                  fontWeight: 900,
-                }}
-              >
-                {safeString(job?.status) || "New Intake"}
-              </div>
-              <div
-                style={{
-                  marginTop: "8px",
-                  color: "rgba(215,229,240,0.76)",
-                  lineHeight: 1.45,
-                }}
-              >
-                Use this page to move the job to <strong>Ready for Pickup</strong> or{" "}
-                <strong>Completed</strong>.
-              </div>
-            </div>
+                  <div style={infoCardStyle}>
+                    <div style={infoLabelStyle}>VIN</div>
+                    <div style={infoMonoStyle}>{job?.vehicle?.vin || "—"}</div>
+                  </div>
 
-            <div
-              style={{
-                borderRadius: "18px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(26,35,48,0.72) 0%, rgba(12,18,26,0.94) 100%)",
-                padding: "16px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.78rem",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  fontWeight: 800,
-                  color: "rgba(215,229,240,0.68)",
-                  marginBottom: "8px",
-                }}
-              >
-                Concern
-              </div>
-              <div
-                style={{
-                  color: "#F3FAFF",
-                  lineHeight: 1.5,
-                }}
-              >
-                {getConcern(job)}
-              </div>
-            </div>
-          </div>
-        </section>
+                  <div style={infoCardStyle}>
+                    <div style={infoLabelStyle}>Mileage In</div>
+                    <div style={infoValueStyle}>{mileageIn}</div>
+                  </div>
 
-        {(saveMessage || errorMessage) && (
-          <div
-            style={{
-              borderRadius: "16px",
-              border: `1px solid ${
-                errorMessage
-                  ? "rgba(255,120,120,0.22)"
-                  : "rgba(126,224,255,0.18)"
-              }`,
-              background: errorMessage
-                ? "linear-gradient(180deg, rgba(54,17,21,0.92) 0%, rgba(28,9,12,0.98) 100%)"
-                : "linear-gradient(180deg, rgba(18,36,52,0.92) 0%, rgba(8,17,28,0.98) 100%)",
-              padding: "14px 16px",
-              color: errorMessage ? "#FFD4D4" : "#DDF5FF",
-              fontWeight: 700,
-            }}
-          >
-            {errorMessage || saveMessage}
-          </div>
-        )}
-
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.25fr) minmax(320px, 0.75fr)",
-            gap: "18px",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gap: "18px",
-            }}
-          >
-            <div
-              style={{
-                borderRadius: "24px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(9,17,28,0.98) 0%, rgba(5,11,18,1) 100%)",
-                boxShadow: "0 28px 70px rgba(0,0,0,0.35)",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  padding: "18px 20px",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "1.05rem",
-                    fontWeight: 900,
-                    marginBottom: "6px",
-                  }}
-                >
-                  Final condition photos
-                </div>
-                <div
-                  style={{
-                    color: "rgba(215,229,240,0.75)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Final vehicle overall condition photos are required before closeout.
-                </div>
-              </div>
-
-              <div style={{ padding: "20px" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "10px",
-                    alignItems: "center",
-                    marginBottom: "18px",
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: "12px",
-                      padding: "12px 16px",
-                      cursor: uploading ? "default" : "pointer",
-                      fontWeight: 900,
-                      color: "#04111C",
-                      background:
-                        "linear-gradient(135deg, #7EE0FF 0%, #6AC2FF 45%, #90B7FF 100%)",
-                      opacity: uploading ? 0.7 : 1,
-                    }}
-                  >
-                    {uploading ? "Uploading..." : "Add Final Photos"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handlePhotoUpload}
-                      style={{ display: "none" }}
-                      disabled={uploading}
-                    />
-                  </label>
-
-                  <div
-                    style={{
-                      color: "rgba(215,229,240,0.72)",
-                      fontSize: "0.95rem",
-                    }}
-                  >
-                    {finalState.photos.length} photo
-                    {finalState.photos.length === 1 ? "" : "s"} attached
+                  <div style={infoCardStyle}>
+                    <div style={infoLabelStyle}>Mileage Out</div>
+                    <div style={infoValueStyle}>{mileageOut}</div>
                   </div>
                 </div>
 
-                {finalState.photos.length === 0 ? (
-                  <div
-                    style={{
-                      borderRadius: "18px",
-                      border: "1px dashed rgba(255,255,255,0.14)",
-                      padding: "22px",
-                      color: "rgba(215,229,240,0.72)",
-                      lineHeight: 1.55,
-                      background: "rgba(255,255,255,0.02)",
-                    }}
-                  >
-                    No final photos yet. Add clear exterior and any important delivery
-                    condition photos before marking the vehicle ready.
+                <div style={sectionPanelStyle}>
+                  <div style={panelLabelStyle}>Customer Concern</div>
+                  <div style={panelTextStyle}>{concernText}</div>
+                </div>
+
+                <div style={authorizationPanelStyle}>
+                  <div style={panelLabelBlueStyle}>Authorization Summary</div>
+                  <div style={legalTextStyle}>
+                    Diagnostics authorization status:{" "}
+                    <strong>{cleanStatus(authStatus)}</strong>. Diagnostics fee
+                    on record:{" "}
+                    <strong>
+                      {diagnosticsFee ? formatMoney(diagnosticsFee) : "—"}
+                    </strong>
+                    .
                   </div>
-                ) : (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-                      gap: "14px",
-                    }}
-                  >
-                    {finalState.photos.map((photo) => (
-                      <div
-                        key={photo.id}
-                        style={{
-                          borderRadius: "18px",
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          overflow: "hidden",
-                          background:
-                            "linear-gradient(180deg, rgba(16,29,42,0.92) 0%, rgba(9,17,26,0.98) 100%)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            aspectRatio: "4 / 3",
-                            backgroundImage: `url(${photo.url})`,
-                            backgroundSize: "cover",
-                            backgroundPosition: "center",
-                          }}
-                        />
+                </div>
 
-                        <div style={{ padding: "12px" }}>
-                          <div
-                            style={{
-                              fontWeight: 800,
-                              lineHeight: 1.35,
-                              marginBottom: "6px",
-                              wordBreak: "break-word",
-                            }}
-                          >
-                            {photo.name}
+                <div style={sectionPanelStyle}>
+                  <div style={panelLabelStyle}>Technician Findings</div>
+
+                  {findingsList.length > 0 ? (
+                    <div style={stackStyle}>
+                      {findingsList.map((item, index) => {
+                        const label =
+                          item?.title ||
+                          item?.finding ||
+                          item?.summary ||
+                          item?.notes ||
+                          `Finding ${index + 1}`;
+
+                        const by =
+                          item?.by ||
+                          item?.findingsBy ||
+                          item?.author ||
+                          item?.tech ||
+                          "";
+
+                        return (
+                          <div key={index} style={stackItemStyle}>
+                            <div style={stackItemTitleStyle}>{label}</div>
+                            {by ? (
+                              <div style={stackItemMetaStyle}>
+                                Recorded by {by}
+                              </div>
+                            ) : null}
                           </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={emptyRecordTextStyle}>
+                      No technician findings were added to this record.
+                    </div>
+                  )}
+                </div>
 
-                          <div
-                            style={{
-                              color: "rgba(215,229,240,0.62)",
-                              fontSize: "0.88rem",
-                              marginBottom: "10px",
-                            }}
-                          >
-                            Added {formatDateTime(photo.addedAt)}
-                          </div>
+                <div style={sectionPanelStyle}>
+                  <div style={panelLabelStyle}>Approved / Documented Work</div>
 
-                          <button
-                            onClick={() => removePhoto(photo.id)}
-                            style={{
-                              border: "1px solid rgba(255,120,120,0.22)",
-                              borderRadius: "10px",
-                              padding: "10px 12px",
-                              cursor: "pointer",
-                              fontWeight: 800,
-                              color: "#FFD8D8",
-                              background: "rgba(90,24,24,0.28)",
-                              width: "100%",
-                            }}
-                          >
-                            Remove
-                          </button>
-                        </div>
+                  {recommendedRepairs.length > 0 ? (
+                    <div style={subSectionStyle}>
+                      <div style={subSectionTitleStyle}>
+                        Recommended Repairs
                       </div>
-                    ))}
+                      <div style={stackStyle}>
+                        {recommendedRepairs.map((item, index) => (
+                          <div key={index} style={stackItemStyle}>
+                            <div style={stackItemTitleStyle}>
+                              {item?.title || item?.description || String(item)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={emptyRecordTextStyle}>
+                      No recommended repairs were added to this record.
+                    </div>
+                  )}
+
+                  {partsList.length > 0 && (
+                    <div style={subSectionStyle}>
+                      <div style={subSectionTitleStyle}>Parts</div>
+                      <div style={stackStyle}>
+                        {partsList.map((item, index) => (
+                          <div key={index} style={lineItemStyle}>
+                            <span style={lineItemTitleStyle}>
+                              {item?.name ||
+                                item?.description ||
+                                `Part ${index + 1}`}
+                            </span>
+                            <span style={lineItemValueStyle}>
+                              {formatMoney(item?.total || item?.price)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {laborList.length > 0 && (
+                    <div style={subSectionStyle}>
+                      <div style={subSectionTitleStyle}>Labor</div>
+                      <div style={stackStyle}>
+                        {laborList.map((item, index) => (
+                          <div key={index} style={lineItemStyle}>
+                            <span style={lineItemTitleStyle}>
+                              {item?.name ||
+                                item?.description ||
+                                `Labor ${index + 1}`}
+                            </span>
+                            <span style={lineItemValueStyle}>
+                              {formatMoney(item?.total || item?.price)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={totalsPanelStyle}>
+                    <div style={totalsRowStyle}>
+                      <span style={totalsLabelStyle}>Parts</span>
+                      <span style={totalsValueStyle}>
+                        {formatMoney(totals.parts)}
+                      </span>
+                    </div>
+                    <div style={totalsRowStyle}>
+                      <span style={totalsLabelStyle}>Labor</span>
+                      <span style={totalsValueStyle}>
+                        {formatMoney(totals.labor)}
+                      </span>
+                    </div>
+                    <div style={totalsRowLastStyle}>
+                      <span style={totalsGrandLabelStyle}>Total</span>
+                      <span style={totalsGrandValueStyle}>
+                        {formatMoney(totals.total)}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-
-            <div
-              style={{
-                borderRadius: "24px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(9,17,28,0.98) 0%, rgba(5,11,18,1) 100%)",
-                boxShadow: "0 28px 70px rgba(0,0,0,0.35)",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  padding: "18px 20px",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "1.05rem",
-                    fontWeight: 900,
-                    marginBottom: "6px",
-                  }}
-                >
-                  Final notes
                 </div>
-                <div
-                  style={{
-                    color: "rgba(215,229,240,0.75)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Document what was completed and what the customer needs to know at
-                  pickup.
-                </div>
-              </div>
 
-              <div
-                style={{
-                  padding: "20px",
-                  display: "grid",
-                  gap: "14px",
-                }}
-              >
-                <div style={{ display: "grid", gap: "8px" }}>
-                  <label style={{ fontWeight: 800, color: "#EAF6FF" }}>
-                    Mileage Out
+                <div style={releasePanelStyle}>
+                  <div style={releasePanelHeaderStyle}>
+                    <div>
+                      <div style={panelLabelGreenStyle}>
+                        Final Release Statement
+                      </div>
+                      <div style={releaseTitleStyle}>
+                        Customer acknowledgment at pickup
+                      </div>
+                    </div>
+                    <div style={releaseBadgeStyle}>Required</div>
+                  </div>
+
+                  <div style={legalTextStyle}>
+                    I acknowledge that I am receiving the vehicle identified on
+                    this record. I understand that this final release reflects
+                    the documented intake, authorization, findings, approvals,
+                    and release status recorded by the shop. If repairs were
+                    declined or not completed, I acknowledge that the vehicle is
+                    being released in its current documented condition.
+                  </div>
+                </div>
+
+                <div style={signaturePanelStyle}>
+                  <div style={signatureHeaderStyle}>
+                    <div>
+                      <div style={panelLabelStyle}>Release Signature</div>
+                      <div style={signatureTitleStyle}>
+                        Complete final customer release
+                      </div>
+                    </div>
+                    <div style={requiredTextStyle}>Name required</div>
+                  </div>
+
+                  <label style={inputLabelStyle} htmlFor="release-signature">
+                    Customer Name
                   </label>
+
                   <input
-                    value={finalState.finalMileageOut}
-                    onChange={(event) =>
-                      updateField("finalMileageOut", event.target.value)
-                    }
-                    placeholder="Enter mileage out"
-                    style={{
-                      width: "100%",
-                      borderRadius: "14px",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.04)",
-                      color: "#F5FAFF",
-                      padding: "14px 16px",
-                      outline: "none",
-                      fontSize: "1rem",
+                    id="release-signature"
+                    value={releaseName}
+                    onChange={(e) => {
+                      setReleaseName(e.target.value);
+                      if (error) setError("");
                     }}
+                    placeholder="Enter customer name"
+                    style={inputStyle}
                   />
-                </div>
 
-                <div style={{ display: "grid", gap: "8px" }}>
-                  <label style={{ fontWeight: 800, color: "#EAF6FF" }}>
-                    Final Summary
+                  <label style={inputLabelStyle} htmlFor="release-notes">
+                    Release Notes Optional
                   </label>
+
                   <textarea
-                    value={finalState.finalSummary}
-                    onChange={(event) =>
-                      updateField("finalSummary", event.target.value)
-                    }
-                    placeholder="Summarize the repair result and current vehicle state"
-                    rows={4}
-                    style={{
-                      width: "100%",
-                      borderRadius: "14px",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.04)",
-                      color: "#F5FAFF",
-                      padding: "14px 16px",
-                      outline: "none",
-                      fontSize: "1rem",
-                      resize: "vertical",
-                    }}
+                    id="release-notes"
+                    value={releaseNotes}
+                    onChange={(e) => setReleaseNotes(e.target.value)}
+                    placeholder="Add release notes, declined-work notes, or pickup notes if needed"
+                    style={textareaStyle}
                   />
-                </div>
 
-                <div style={{ display: "grid", gap: "8px" }}>
-                  <label style={{ fontWeight: 800, color: "#EAF6FF" }}>
-                    Customer-Facing Notes
-                  </label>
-                  <textarea
-                    value={finalState.customerFacingNotes}
-                    onChange={(event) =>
-                      updateField("customerFacingNotes", event.target.value)
-                    }
-                    placeholder="Anything the customer needs to know at pickup"
-                    rows={4}
-                    style={{
-                      width: "100%",
-                      borderRadius: "14px",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.04)",
-                      color: "#F5FAFF",
-                      padding: "14px 16px",
-                      outline: "none",
-                      fontSize: "1rem",
-                      resize: "vertical",
-                    }}
-                  />
-                </div>
+                  {error ? <div style={errorTextStyle}>{error}</div> : null}
 
-                <div style={{ display: "grid", gap: "8px" }}>
-                  <label style={{ fontWeight: 800, color: "#EAF6FF" }}>
-                    Internal Closeout Notes
-                  </label>
-                  <textarea
-                    value={finalState.internalCloseoutNotes}
-                    onChange={(event) =>
-                      updateField("internalCloseoutNotes", event.target.value)
-                    }
-                    placeholder="Internal notes, delivery reminders, or follow-up items"
-                    rows={4}
-                    style={{
-                      width: "100%",
-                      borderRadius: "14px",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.04)",
-                      color: "#F5FAFF",
-                      padding: "14px 16px",
-                      outline: "none",
-                      fontSize: "1rem",
-                      resize: "vertical",
-                    }}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: "14px",
-                  }}
-                >
-                  <div style={{ display: "grid", gap: "8px" }}>
-                    <label style={{ fontWeight: 800, color: "#EAF6FF" }}>
-                      Completed By
-                    </label>
-                    <input
-                      value={finalState.completedBy}
-                      onChange={(event) =>
-                        updateField("completedBy", event.target.value)
-                      }
-                      placeholder="Tech, advisor, or manager"
-                      style={{
-                        width: "100%",
-                        borderRadius: "14px",
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        background: "rgba(255,255,255,0.04)",
-                        color: "#F5FAFF",
-                        padding: "14px 16px",
-                        outline: "none",
-                        fontSize: "1rem",
-                      }}
-                    />
-                  </div>
-
-                  <div
-                    style={{
-                      borderRadius: "14px",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "rgba(255,255,255,0.03)",
-                      padding: "14px 16px",
-                    }}
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    style={submitButtonStyle}
                   >
-                    <div
-                      style={{
-                        fontSize: "0.78rem",
-                        fontWeight: 800,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.08em",
-                        color: "rgba(215,229,240,0.62)",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Completed At
+                    Sign & Complete Final Release
+                  </button>
+
+                  <div style={finePrintStyle}>
+                    This records the customer release acknowledgment and
+                    timestamps it into the ShopPROOF vehicle record.
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <aside style={sideColumnStyle}>
+              <div style={sideCardStyle}>
+                <div style={sideSectionTitleStyle}>
+                  What this final page proves
+                </div>
+
+                <div style={timelineItemStyle}>
+                  <div style={timelineDotBlueStyle} />
+                  <div>
+                    <div style={timelineTitleStyle}>Vehicle identity</div>
+                    <div style={timelineTextStyle}>
+                      Which vehicle was received, documented, and released.
                     </div>
-                    <div style={{ fontWeight: 800 }}>
-                      {finalState.completedAt
-                        ? formatDateTime(finalState.completedAt)
-                        : "Not completed yet"}
+                  </div>
+                </div>
+
+                <div style={timelineItemStyle}>
+                  <div style={timelineDotAmberStyle} />
+                  <div>
+                    <div style={timelineTitleStyle}>Authorization chain</div>
+                    <div style={timelineTextStyle}>
+                      That diagnostics and related work were documented through
+                      the job record.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={timelineItemLastStyle}>
+                  <div style={timelineDotEmeraldStyle} />
+                  <div>
+                    <div style={timelineTitleStyle}>Final release</div>
+                    <div style={timelineTextStyle}>
+                      That the vehicle was acknowledged and released at pickup.
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+
+              <div style={sideCardStyle}>
+                <div style={sideSectionTitleStyle}>Record snapshot</div>
+
+                <div style={snapshotRowStyle}>
+                  <span style={snapshotLabelStyle}>Diagnostics Fee</span>
+                  <span style={snapshotValueStyle}>
+                    {diagnosticsFee ? formatMoney(diagnosticsFee) : "—"}
+                  </span>
+                </div>
+
+                <div style={snapshotRowStyle}>
+                  <span style={snapshotLabelStyle}>Authorization</span>
+                  <span style={snapshotValueStyle}>
+                    {cleanStatus(authStatus)}
+                  </span>
+                </div>
+
+                <div style={snapshotRowStyle}>
+                  <span style={snapshotLabelStyle}>Findings</span>
+                  <span style={snapshotValueStyle}>{findingsList.length}</span>
+                </div>
+
+                <div style={snapshotRowLastStyle}>
+                  <span style={snapshotLabelStyle}>Recorded Total</span>
+                  <span style={snapshotValueStyle}>
+                    {formatMoney(totals.total)}
+                  </span>
+                </div>
+              </div>
+
+              <div style={sideGuidanceCardStyle}>
+                <div style={sideSectionTitleStyle}>Final guidance</div>
+                <div style={sideTextStyle}>
+                  Confirm the customer name before completing release. This page
+                  closes the documentation chain and should reflect the final
+                  condition, approval state, and customer acknowledgment for this
+                  vehicle.
+                </div>
+              </div>
+            </aside>
           </div>
-
-          <div
-            style={{
-              display: "grid",
-              gap: "18px",
-            }}
-          >
-            <div
-              style={{
-                borderRadius: "24px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(9,17,28,0.98) 0%, rgba(5,11,18,1) 100%)",
-                boxShadow: "0 28px 70px rgba(0,0,0,0.35)",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  padding: "18px 20px",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "1.05rem",
-                    fontWeight: 900,
-                    marginBottom: "6px",
-                  }}
-                >
-                  Closeout checklist
-                </div>
-                <div
-                  style={{
-                    color: "rgba(215,229,240,0.75)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Confirm final-condition and delivery-readiness items before closing
-                  the job.
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "12px",
-                  display: "grid",
-                  gap: "10px",
-                }}
-              >
-                {[
-                  ["allWorkCompleted", "All approved work completed"],
-                  ["vehicleRoadTested", "Vehicle road-tested / verified if applicable"],
-                  ["noToolsLeftInside", "No tools, parts, or shop items left inside"],
-                  ["fluidsChecked", "Fluids checked / corrected if applicable"],
-                  ["warningLightsReviewed", "Warning lights reviewed before delivery"],
-                  ["finalConditionPhotosTaken", "Final condition photos taken"],
-                  ["customerItemsReturned", "Customer items / keys ready to return"],
-                ].map(([key, label]) => {
-                  const typedKey = key as keyof FinalChecklist;
-                  const checked = finalState.checklist[typedKey];
-
-                  return (
-                    <label
-                      key={key}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: "12px",
-                        borderRadius: "16px",
-                        border: `1px solid ${
-                          checked
-                            ? "rgba(107,228,171,0.18)"
-                            : "rgba(255,255,255,0.07)"
-                        }`,
-                        background: checked
-                          ? "linear-gradient(180deg, rgba(15,43,34,0.68) 0%, rgba(8,21,17,0.94) 100%)"
-                          : "linear-gradient(180deg, rgba(18,28,40,0.72) 0%, rgba(9,16,24,0.95) 100%)",
-                        padding: "14px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) =>
-                          updateChecklistField(typedKey, event.target.checked)
-                        }
-                        style={{
-                          width: "18px",
-                          height: "18px",
-                          marginTop: "2px",
-                        }}
-                      />
-
-                      <div>
-                        <div
-                          style={{
-                            fontWeight: 800,
-                            color: "#F3FAFF",
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {label}
-                        </div>
-                        <div
-                          style={{
-                            marginTop: "4px",
-                            fontSize: "0.9rem",
-                            color: checked
-                              ? "rgba(189,255,226,0.72)"
-                              : "rgba(215,229,240,0.6)",
-                          }}
-                        >
-                          {checked ? "Checked off" : "Still needs confirmation"}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div
-              style={{
-                borderRadius: "24px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(9,17,28,0.98) 0%, rgba(5,11,18,1) 100%)",
-                boxShadow: "0 28px 70px rgba(0,0,0,0.35)",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  padding: "18px 20px",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "1.05rem",
-                    fontWeight: 900,
-                    marginBottom: "6px",
-                  }}
-                >
-                  Status actions
-                </div>
-                <div
-                  style={{
-                    color: "rgba(215,229,240,0.75)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Move the job forward only when final condition is truly ready.
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "18px",
-                  display: "grid",
-                  gap: "12px",
-                }}
-              >
-                <button
-                  onClick={markReadyForPickup}
-                  disabled={saving || !canMarkReady}
-                  style={{
-                    border: "none",
-                    borderRadius: "14px",
-                    padding: "14px 16px",
-                    cursor: saving || !canMarkReady ? "default" : "pointer",
-                    fontWeight: 900,
-                    color: "#04111C",
-                    background: canMarkReady
-                      ? "linear-gradient(135deg, #7EF0C0 0%, #6CD9A9 48%, #9FF5D1 100%)"
-                      : "linear-gradient(135deg, rgba(114,128,140,0.45) 0%, rgba(95,107,118,0.45) 100%)",
-                    opacity: saving ? 0.7 : 1,
-                  }}
-                >
-                  Mark Ready for Pickup
-                </button>
-
-                <button
-                  onClick={markCompleted}
-                  disabled={saving || !canComplete}
-                  style={{
-                    border: "none",
-                    borderRadius: "14px",
-                    padding: "14px 16px",
-                    cursor: saving || !canComplete ? "default" : "pointer",
-                    fontWeight: 900,
-                    color: "#04111C",
-                    background: canComplete
-                      ? "linear-gradient(135deg, #FFD37A 0%, #FFB95C 46%, #FFDFA3 100%)"
-                      : "linear-gradient(135deg, rgba(114,128,140,0.45) 0%, rgba(95,107,118,0.45) 100%)",
-                    opacity: saving ? 0.7 : 1,
-                  }}
-                >
-                  Mark Completed
-                </button>
-
-                <div
-                  style={{
-                    borderRadius: "16px",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background:
-                      "linear-gradient(180deg, rgba(18,28,40,0.72) 0%, rgba(9,16,24,0.95) 100%)",
-                    padding: "14px",
-                    color: "rgba(215,229,240,0.75)",
-                    lineHeight: 1.55,
-                    fontSize: "0.94rem",
-                  }}
-                >
-                  <strong style={{ color: "#F5FAFF" }}>Ready for Pickup</strong> requires
-                  completed work, final photos, mileage out, and final summary.
-                  <br />
-                  <br />
-                  <strong style={{ color: "#F5FAFF" }}>Completed</strong> also requires
-                  customer-facing notes.
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                borderRadius: "24px",
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(9,17,28,0.98) 0%, rgba(5,11,18,1) 100%)",
-                boxShadow: "0 28px 70px rgba(0,0,0,0.35)",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  padding: "18px 20px",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "1.05rem",
-                    fontWeight: 900,
-                    marginBottom: "6px",
-                  }}
-                >
-                  Related pages
-                </div>
-                <div
-                  style={{
-                    color: "rgba(215,229,240,0.75)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Jump back into the main job workflow.
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "12px",
-                  display: "grid",
-                  gap: "10px",
-                }}
-              >
-                {[
-                  {
-                    href: `/shopproof/jobs/${jobId}`,
-                    title: "Job Command Center",
-                    text: "Review job details, customer info, and overall status.",
-                  },
-                  {
-                    href: `/shopproof/jobs/${jobId}/work-order`,
-                    title: "Work Order",
-                    text: "Open the work-order layer tied to this repair.",
-                  },
-                  {
-                    href: `/shopproof/sign/${job?.authorizationToken || job?.token || ""}`,
-                    title: "Customer Sign Flow",
-                    text: "Open the token-based acknowledgment or authorization flow.",
-                  },
-                ].map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    style={{
-                      textDecoration: "none",
-                      borderRadius: "16px",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background:
-                        "linear-gradient(180deg, rgba(18,28,40,0.72) 0%, rgba(9,16,24,0.95) 100%)",
-                      padding: "14px",
-                      color: "#F5FAFF",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        marginBottom: "6px",
-                      }}
-                    >
-                      {item.title}
-                    </div>
-                    <div
-                      style={{
-                        color: "rgba(215,229,240,0.72)",
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {item.text}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
       </div>
-    </main>
+    </div>
   );
-}// redeploy trigger Fri Apr  3 01:13:55 CDT 2026
+}
+
+const pageStyle: CSSProperties = {
+  minHeight: "100vh",
+  background: PAGE_BG,
+  color: TEXT_MAIN,
+  fontFamily:
+    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+};
+
+const pageInnerStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: 1280,
+  margin: "0 auto",
+  padding: "28px 20px 44px",
+};
+
+const shellStyle: CSSProperties = {
+  borderRadius: 30,
+  border: SOFT_BORDER,
+  background: SHELL_BG,
+  boxShadow:
+    "0 24px 60px rgba(15,23,42,0.10), inset 0 1px 0 rgba(255,255,255,0.72)",
+  padding: 24,
+};
+
+const centerWrapStyle: CSSProperties = {
+  minHeight: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 20,
+};
+
+const headerStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 16,
+  marginBottom: 18,
+};
+
+const miniBrandStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.16em",
+  textTransform: "uppercase",
+  color: BLUE,
+};
+
+const pageTitleStyle: CSSProperties = {
+  margin: "6px 0 10px",
+  fontSize: 34,
+  lineHeight: 1.08,
+  fontWeight: 800,
+  letterSpacing: "-0.03em",
+  color: TEXT_MAIN,
+};
+
+const pageIntroStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  lineHeight: 1.65,
+  color: TEXT_SOFT,
+  maxWidth: 760,
+};
+
+const headerBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "10px 14px",
+  borderRadius: 999,
+  border: "1px solid rgba(37,99,235,0.14)",
+  background: BLUE_SOFT,
+  color: "#1d4ed8",
+  fontSize: 12,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const statusBandStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: 0,
+  overflow: "hidden",
+  borderRadius: 24,
+  border: "1px solid rgba(15,23,42,0.18)",
+  background: STATUS_BAND_BG,
+  boxShadow:
+    "0 18px 36px rgba(15,23,42,0.14), inset 0 1px 0 rgba(255,255,255,0.10)",
+  marginBottom: 18,
+};
+
+const statusBandItemStyle: CSSProperties = {
+  padding: "17px 18px",
+  borderRight: "1px solid rgba(226,232,240,0.14)",
+};
+
+const statusBandItemLastStyle: CSSProperties = {
+  padding: "17px 18px",
+};
+
+const statusBandLabelStyle: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 800,
+  letterSpacing: "0.15em",
+  textTransform: "uppercase",
+  color: "rgba(226,232,240,0.72)",
+  marginBottom: 7,
+};
+
+const statusBandValueStyle: CSSProperties = {
+  fontSize: 15,
+  lineHeight: 1.35,
+  fontWeight: 800,
+  color: "#f8fafc",
+};
+
+const layoutStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.7fr) 340px",
+  gap: 18,
+};
+
+const mainColumnStyle: CSSProperties = {
+  minWidth: 0,
+};
+
+const sideColumnStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 16,
+};
+
+const documentCardStyle: CSSProperties = {
+  borderRadius: 26,
+  border: PANEL_BORDER,
+  background: PANEL_BG,
+  boxShadow:
+    "0 18px 40px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.75)",
+  padding: 22,
+};
+
+const sideCardStyle: CSSProperties = {
+  borderRadius: 22,
+  border: PANEL_BORDER,
+  background: PANEL_BG,
+  boxShadow:
+    "0 18px 40px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.75)",
+  padding: 18,
+};
+
+const sideGuidanceCardStyle: CSSProperties = {
+  borderRadius: 22,
+  border: "1px solid rgba(37,99,235,0.14)",
+  background: ACCENT_PANEL_BG,
+  boxShadow:
+    "0 18px 40px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.75)",
+  padding: 18,
+};
+
+const documentTopStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 16,
+  marginBottom: 18,
+};
+
+const sectionEyebrowStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.14em",
+  textTransform: "uppercase",
+  color: TEXT_MUTED,
+  marginBottom: 8,
+};
+
+const documentTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 28,
+  lineHeight: 1.12,
+  fontWeight: 800,
+  letterSpacing: "-0.03em",
+  color: TEXT_MAIN,
+};
+
+const awaitingBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "9px 12px",
+  borderRadius: 999,
+  background: AMBER_SOFT,
+  border: "1px solid rgba(217,119,6,0.16)",
+  color: AMBER,
+  fontSize: 12,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const infoGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 14,
+  marginBottom: 16,
+};
+
+const infoCardStyle: CSSProperties = {
+  borderRadius: 18,
+  border: "1px solid rgba(71,85,105,0.10)",
+  background: "rgba(248,250,252,0.96)",
+  padding: "14px 15px",
+};
+
+const infoLabelStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: TEXT_MUTED,
+  marginBottom: 8,
+};
+
+const infoValueStyle: CSSProperties = {
+  fontSize: 15,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+};
+
+const infoMonoStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+  fontFamily:
+    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  wordBreak: "break-all",
+};
+
+const sectionPanelStyle: CSSProperties = {
+  marginBottom: 16,
+  borderRadius: 20,
+  border: "1px solid rgba(71,85,105,0.10)",
+  background: "rgba(248,250,252,0.98)",
+  padding: "16px 17px",
+};
+
+const panelLabelStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: TEXT_MUTED,
+  marginBottom: 10,
+};
+
+const panelLabelBlueStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: BLUE,
+  marginBottom: 10,
+};
+
+const panelLabelGreenStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: EMERALD,
+  marginBottom: 7,
+};
+
+const panelTextStyle: CSSProperties = {
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: TEXT_SOFT,
+};
+
+const authorizationPanelStyle: CSSProperties = {
+  marginBottom: 16,
+  borderRadius: 22,
+  border: "1px solid rgba(37,99,235,0.14)",
+  background: ACCENT_PANEL_BG,
+  padding: "18px 18px 16px",
+};
+
+const releasePanelStyle: CSSProperties = {
+  marginBottom: 16,
+  borderRadius: 22,
+  border: "1px solid rgba(5,150,105,0.14)",
+  background: SUCCESS_PANEL_BG,
+  padding: "18px 18px 16px",
+};
+
+const releasePanelHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 14,
+  marginBottom: 12,
+};
+
+const releaseTitleStyle: CSSProperties = {
+  fontSize: 18,
+  lineHeight: 1.25,
+  fontWeight: 800,
+  color: TEXT_MAIN,
+};
+
+const releaseBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: EMERALD_SOFT,
+  border: "1px solid rgba(5,150,105,0.14)",
+  color: EMERALD,
+  fontSize: 11,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const legalTextStyle: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.78,
+  color: TEXT_SOFT,
+};
+
+const emptyRecordTextStyle: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.65,
+  color: TEXT_MUTED,
+  borderRadius: 14,
+  border: "1px dashed rgba(100,116,139,0.22)",
+  background: "rgba(255,255,255,0.54)",
+  padding: "12px 13px",
+};
+
+const subSectionStyle: CSSProperties = {
+  marginTop: 14,
+};
+
+const subSectionTitleStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: TEXT_SOFT,
+  marginBottom: 10,
+};
+
+const stackStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+};
+
+const stackItemStyle: CSSProperties = {
+  borderRadius: 14,
+  border: "1px solid rgba(71,85,105,0.08)",
+  background: "rgba(255,255,255,0.72)",
+  padding: "12px 13px",
+};
+
+const stackItemTitleStyle: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.55,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+};
+
+const stackItemMetaStyle: CSSProperties = {
+  marginTop: 5,
+  fontSize: 12,
+  color: TEXT_MUTED,
+};
+
+const lineItemStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  borderRadius: 14,
+  border: "1px solid rgba(71,85,105,0.08)",
+  background: "rgba(255,255,255,0.72)",
+  padding: "12px 13px",
+};
+
+const lineItemTitleStyle: CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.5,
+  fontWeight: 600,
+  color: TEXT_MAIN,
+};
+
+const lineItemValueStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+  whiteSpace: "nowrap",
+};
+
+const totalsPanelStyle: CSSProperties = {
+  marginTop: 16,
+  borderRadius: 18,
+  border: "1px solid rgba(71,85,105,0.10)",
+  background: "rgba(255,255,255,0.82)",
+  padding: 14,
+};
+
+const totalsRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "8px 0",
+  borderBottom: "1px solid rgba(71,85,105,0.08)",
+};
+
+const totalsRowLastStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "10px 0 0",
+};
+
+const totalsLabelStyle: CSSProperties = {
+  fontSize: 13,
+  color: TEXT_SOFT,
+};
+
+const totalsValueStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+};
+
+const totalsGrandLabelStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: TEXT_MAIN,
+};
+
+const totalsGrandValueStyle: CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: TEXT_MAIN,
+};
+
+const signaturePanelStyle: CSSProperties = {
+  borderRadius: 22,
+  border: "1px solid rgba(71,85,105,0.10)",
+  background: "rgba(255,255,255,0.96)",
+  padding: 18,
+};
+
+const signatureHeaderStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 14,
+  marginBottom: 16,
+};
+
+const signatureTitleStyle: CSSProperties = {
+  fontSize: 18,
+  lineHeight: 1.25,
+  fontWeight: 800,
+  color: TEXT_MAIN,
+};
+
+const requiredTextStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "7px 10px",
+  borderRadius: 999,
+  background: RED_SOFT,
+  border: "1px solid rgba(220,38,38,0.14)",
+  color: RED,
+  fontSize: 11,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const inputLabelStyle: CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: TEXT_SOFT,
+  marginBottom: 10,
+};
+
+const inputStyle: CSSProperties = {
+  width: "100%",
+  padding: "14px 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(71,85,105,0.18)",
+  background: "#ffffff",
+  color: TEXT_MAIN,
+  outline: "none",
+  fontSize: 15,
+  marginBottom: 14,
+  boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)",
+};
+
+const textareaStyle: CSSProperties = {
+  width: "100%",
+  minHeight: 110,
+  resize: "vertical",
+  padding: "14px 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(71,85,105,0.18)",
+  background: "#ffffff",
+  color: TEXT_MAIN,
+  outline: "none",
+  fontSize: 15,
+  marginBottom: 12,
+  boxShadow: "inset 0 1px 2px rgba(15,23,42,0.04)",
+  fontFamily: "inherit",
+};
+
+const errorTextStyle: CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.5,
+  color: RED,
+  marginBottom: 12,
+};
+
+const submitButtonStyle: CSSProperties = {
+  width: "100%",
+  padding: "16px 16px",
+  borderRadius: 14,
+  border: "1px solid rgba(37,99,235,0.16)",
+  background:
+    "linear-gradient(180deg, rgba(37,99,235,0.96) 0%, rgba(29,78,216,0.96) 100%)",
+  color: "#eff6ff",
+  fontSize: 15,
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow: "0 10px 22px rgba(37,99,235,0.16)",
+};
+
+const finePrintStyle: CSSProperties = {
+  marginTop: 12,
+  fontSize: 12,
+  lineHeight: 1.65,
+  color: TEXT_MUTED,
+};
+
+const sideSectionTitleStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: TEXT_SOFT,
+  marginBottom: 14,
+};
+
+const timelineItemStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 16,
+};
+
+const timelineItemLastStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+};
+
+const timelineDotBaseStyle: CSSProperties = {
+  width: 11,
+  height: 11,
+  borderRadius: 999,
+  marginTop: 6,
+  flexShrink: 0,
+};
+
+const timelineDotBlueStyle: CSSProperties = {
+  ...timelineDotBaseStyle,
+  background: BLUE,
+  boxShadow: "0 0 0 4px rgba(37,99,235,0.10)",
+};
+
+const timelineDotAmberStyle: CSSProperties = {
+  ...timelineDotBaseStyle,
+  background: AMBER,
+  boxShadow: "0 0 0 4px rgba(217,119,6,0.10)",
+};
+
+const timelineDotEmeraldStyle: CSSProperties = {
+  ...timelineDotBaseStyle,
+  background: EMERALD,
+  boxShadow: "0 0 0 4px rgba(5,150,105,0.10)",
+};
+
+const timelineTitleStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+  marginBottom: 4,
+};
+
+const timelineTextStyle: CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: TEXT_SOFT,
+};
+
+const snapshotRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "9px 0",
+  borderBottom: "1px solid rgba(71,85,105,0.08)",
+};
+
+const snapshotRowLastStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "9px 0 0",
+};
+
+const snapshotLabelStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: TEXT_MUTED,
+};
+
+const snapshotValueStyle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+  textAlign: "right",
+};
+
+const sideTextStyle: CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.7,
+  color: TEXT_SOFT,
+};
+
+const statusCardStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: 720,
+  borderRadius: 28,
+  border: PANEL_BORDER,
+  background: PANEL_BG,
+  boxShadow:
+    "0 20px 44px rgba(15,23,42,0.10), inset 0 1px 0 rgba(255,255,255,0.76)",
+  padding: "28px 26px",
+};
+
+const invalidBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: RED_SOFT,
+  border: "1px solid rgba(220,38,38,0.14)",
+  color: RED,
+  fontSize: 12,
+  fontWeight: 700,
+  marginBottom: 14,
+};
+
+const successBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: EMERALD_SOFT,
+  border: "1px solid rgba(5,150,105,0.14)",
+  color: EMERALD,
+  fontSize: 12,
+  fontWeight: 700,
+  marginBottom: 14,
+};
+
+const statusTitleStyle: CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: 30,
+  lineHeight: 1.12,
+  fontWeight: 800,
+  letterSpacing: "-0.03em",
+  color: TEXT_MAIN,
+};
+
+const statusTextStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  lineHeight: 1.7,
+  color: TEXT_SOFT,
+};
+
+const summaryPanelStyle: CSSProperties = {
+  marginTop: 18,
+  borderRadius: 18,
+  border: "1px solid rgba(5,150,105,0.14)",
+  background: "rgba(247,253,250,0.98)",
+  padding: 16,
+};
+
+const summaryRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "10px 0",
+  borderBottom: "1px solid rgba(71,85,105,0.08)",
+};
+
+const summaryRowLastStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "10px 0 0",
+};
+
+const summaryLabelStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: TEXT_MUTED,
+};
+
+const summaryValueStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: TEXT_MAIN,
+  textAlign: "right",
+};
+```

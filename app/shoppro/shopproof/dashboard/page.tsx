@@ -79,53 +79,45 @@ type DashboardJobCard = {
 
 const THEME = {
   pageBase:
-    "linear-gradient(180deg, #dfe6ee 0%, #d7e0e9 18%, #ced8e3 44%, #cad4df 74%, #d1dbe5 100%)",
+    "linear-gradient(180deg, #02060B 0%, #030912 16%, #03101B 42%, #020912 72%, #02060B 100%)",
   shell:
-    "linear-gradient(180deg, rgba(225,233,241,0.96) 0%, rgba(216,226,237,0.985) 48%, rgba(209,220,231,0.995) 100%)",
+    "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(5,12,20,0.995) 42%, rgba(3,9,15,1) 100%)",
   shellInner:
-    "linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.04) 22%, rgba(255,255,255,0) 48%)",
+    "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 16%, rgba(255,255,255,0) 36%)",
   panel:
-    "linear-gradient(180deg, rgba(250,252,255,0.985) 0%, rgba(243,247,252,0.995) 54%, rgba(238,243,249,1) 100%)",
+    "linear-gradient(180deg, rgba(13,24,37,0.98) 0%, rgba(8,16,27,0.99) 48%, rgba(7,13,22,1) 100%)",
   card:
-    "linear-gradient(180deg, rgba(247,250,254,0.98) 0%, rgba(239,245,251,1) 100%)",
-  darkCard:
-    "linear-gradient(180deg, rgba(28,42,60,0.96) 0%, rgba(20,33,48,0.98) 48%, rgba(16,27,41,1) 100%)",
-  darkCardSoft:
-    "linear-gradient(180deg, rgba(40,56,76,0.82) 0%, rgba(28,42,60,0.9) 100%)",
+    "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(14,27,42,0.98) 44%, rgba(10,20,33,1) 100%)",
   cardTop:
-    "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 26%, rgba(255,255,255,0) 58%)",
-  text: "#132031",
-  textSoft: "#223347",
-  textMuted: "#61758a",
-  textDim: "#73879b",
-  textOnDark: "#f3f7fb",
-  textOnDarkMuted: "rgba(219,229,239,0.76)",
-  lineFaint: "rgba(28,47,67,0.07)",
-  lineSoft: "rgba(28,47,67,0.11)",
-  border: "1px solid rgba(69,94,118,0.20)",
-  borderSoft: "1px solid rgba(84,108,131,0.14)",
-  shellShadow: "0 30px 80px rgba(27,39,54,0.16)",
-  panelShadow: "0 16px 34px rgba(28,42,59,0.09)",
-  cardShadow: "0 12px 24px rgba(27,40,56,0.06)",
-  inputInset:
-    "inset 0 1px 0 rgba(255,255,255,0.78), inset 0 -1px 0 rgba(170,190,210,0.10)",
-  blue: "#2f6bff",
-  blueSoft: "rgba(47,107,255,0.10)",
-  blueLine: "rgba(47,107,255,0.58)",
-  emerald: "#1f9d7a",
-  emeraldSoft: "rgba(31,157,122,0.10)",
-  emeraldLine: "rgba(31,157,122,0.52)",
-  orange: "#c8832f",
-  orangeSoft: "rgba(200,131,47,0.10)",
-  orangeLine: "rgba(200,131,47,0.52)",
-  yellow: "#b9922e",
-  yellowSoft: "rgba(185,146,46,0.10)",
-  yellowLine: "rgba(185,146,46,0.52)",
-  red: "#c85d6c",
-  redSoft: "rgba(200,93,108,0.10)",
-  redLine: "rgba(200,93,108,0.52)",
+    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.014) 26%, rgba(255,255,255,0) 58%)",
+  text: "#F5FAFF",
+  textSoft: "#D7E5F0",
+  textMuted: "#9CB1C1",
+  textDim: "#73889A",
+  lineFaint: "rgba(255,255,255,0.032)",
+  lineSoft: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(109, 142, 176, 0.24)",
+  borderSoft: "1px solid rgba(255,255,255,0.085)",
+  shellShadow: "0 34px 90px rgba(0,0,0,0.5)",
+  panelShadow: "0 18px 42px rgba(0,0,0,0.24)",
+  cardShadow: "0 10px 22px rgba(0,0,0,0.16)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.16)",
+  blueLine: "rgba(59,130,246,0.84)",
+  emerald: "#27D9BF",
+  emeraldSoft: "rgba(39,217,191,0.18)",
+  emeraldLine: "rgba(39,217,191,0.84)",
+  orange: "#F59E42",
+  orangeSoft: "rgba(245,158,66,0.18)",
+  orangeLine: "rgba(245,158,66,0.84)",
+  yellow: "#F6C454",
+  yellowSoft: "rgba(246,196,84,0.16)",
+  yellowLine: "rgba(246,196,84,0.84)",
+  red: "#FF8792",
+  redSoft: "rgba(255,135,146,0.16)",
+  redLine: "rgba(255,135,146,0.84)",
   buttonBlue:
-    "linear-gradient(180deg, rgba(47,107,255,0.96) 0%, rgba(34,91,219,0.98) 100%)",
+    "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
 };
 
 function normalizeJobStatus(status?: string | null): ShopJobStatus {
@@ -402,18 +394,20 @@ export default function ShopProofDashboardPage() {
       style={{
         minHeight: "100vh",
         backgroundImage: `
-          linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 16%, rgba(255,255,255,0) 34%),
+          radial-gradient(circle at 50% 0%, rgba(57,122,255,0.18) 0%, rgba(57,122,255,0.06) 18%, rgba(57,122,255,0) 40%),
+          radial-gradient(circle at 0% 100%, rgba(39,217,191,0.06) 0%, rgba(39,217,191,0.02) 18%, rgba(39,217,191,0) 36%),
+          radial-gradient(circle at 100% 12%, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 12%, rgba(255,255,255,0) 30%),
           repeating-linear-gradient(
             0deg,
-            rgba(76,97,120,0.035) 0px,
-            rgba(76,97,120,0.035) 1px,
+            rgba(255,255,255,0.012) 0px,
+            rgba(255,255,255,0.012) 1px,
             transparent 1px,
             transparent 46px
           ),
           repeating-linear-gradient(
             90deg,
-            rgba(76,97,120,0.022) 0px,
-            rgba(76,97,120,0.022) 1px,
+            rgba(255,255,255,0.006) 0px,
+            rgba(255,255,255,0.006) 1px,
             transparent 1px,
             transparent 74px
           ),
@@ -442,9 +436,16 @@ export default function ShopProofDashboardPage() {
             pointerEvents: "none",
             background: `
               ${THEME.shellInner},
-              linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 20%, rgba(255,255,255,0) 42%)
+              radial-gradient(circle at 50% 0%, rgba(71,123,255,0.14) 0%, rgba(71,123,255,0.05) 20%, rgba(71,123,255,0) 44%),
+              repeating-linear-gradient(
+                135deg,
+                rgba(255,255,255,0.012) 0px,
+                rgba(255,255,255,0.012) 1px,
+                transparent 1px,
+                transparent 9px
+              )
             `,
-            opacity: 1,
+            opacity: 0.95,
           }}
         />
 
@@ -476,11 +477,11 @@ export default function ShopProofDashboardPage() {
                 fontSize: 11,
                 fontWeight: 900,
                 letterSpacing: "-0.01em",
-                color: THEME.blue,
+                color: THEME.text,
                 background:
-                  "linear-gradient(180deg, rgba(247,250,254,0.98) 0%, rgba(238,244,250,1) 100%)",
-                border: THEME.borderSoft,
-                boxShadow: "0 6px 14px rgba(24,39,58,0.06)",
+                  "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(10,20,33,1) 100%)",
+                border: THEME.border,
+                boxShadow: "0 0 18px rgba(59,130,246,0.18)",
                 display: "inline-flex",
                 alignItems: "center",
               }}
@@ -499,7 +500,7 @@ export default function ShopProofDashboardPage() {
                 textTransform: "uppercase",
                 color: THEME.textSoft,
                 background:
-                  "linear-gradient(180deg, rgba(241,246,251,0.88) 0%, rgba(232,239,246,0.95) 100%)",
+                  "linear-gradient(180deg, rgba(14,24,36,0.88) 0%, rgba(9,17,27,0.95) 100%)",
                 border: THEME.borderSoft,
               }}
             >
@@ -746,9 +747,9 @@ function TopStatusBox({
       style={{
         minHeight: 92,
         borderRadius: 18,
-        background: THEME.darkCard,
+        background: THEME.card,
         border: THEME.borderSoft,
-        boxShadow: "0 16px 30px rgba(24,39,58,0.14), inset 0 1px 0 rgba(255,255,255,0.05)",
+        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
         padding: "14px 14px 12px",
         position: "relative",
         overflow: "hidden",
@@ -766,7 +767,7 @@ function TopStatusBox({
         <div
           style={{
             fontSize: 11,
-            color: THEME.textOnDarkMuted,
+            color: THEME.textDim,
             fontWeight: 900,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
@@ -780,7 +781,7 @@ function TopStatusBox({
             lineHeight: 1,
             fontWeight: 950,
             letterSpacing: "-0.06em",
-            color: THEME.textOnDark,
+            color: THEME.text,
           }}
         >
           {value}
@@ -843,7 +844,7 @@ function SectionCard({
           bottom: 0,
           width: 3,
           background: tone.line,
-          
+          boxShadow: `0 0 14px ${tone.line}`,
         }}
       />
 
@@ -875,7 +876,7 @@ function SectionCard({
               color: tone.text,
               background: tone.soft,
               border: `1px solid ${tone.line}`,
-              boxShadow: "0 6px 12px rgba(24,39,58,0.05)",
+              boxShadow: `0 0 12px ${tone.soft}`,
             }}
           >
             {icon}
@@ -950,14 +951,14 @@ function InputBlock({
           borderRadius: 14,
           padding: "0 14px",
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,249,253,0.98) 100%)",
-          border: "1px solid rgba(101,126,151,0.18)",
+            "linear-gradient(180deg, rgba(16,28,42,0.98) 0%, rgba(9,18,29,0.98) 100%)",
+          border: "1px solid rgba(109, 142, 176, 0.24)",
           color: THEME.text,
           fontSize: 14,
           fontWeight: 700,
           outline: "none",
           boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.22), 0 6px 14px rgba(24,39,58,0.05)",
+            "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.12)",
         }}
       />
     </label>
@@ -1127,7 +1128,7 @@ function DashboardSection({
                 borderRadius: 16,
                 border: THEME.borderSoft,
                 background:
-                  "linear-gradient(180deg, rgba(51,65,85,0.60) 0%, rgba(30,41,59,0.75) 100%)",
+                  "linear-gradient(180deg, rgba(16,28,42,0.72) 0%, rgba(10,18,29,0.88) 100%)",
                 display: "grid",
                 placeItems: "center",
                 padding: "18px",
@@ -1170,8 +1171,8 @@ function JobCard({
         borderRadius: 16,
         border: THEME.borderSoft,
         background:
-          "linear-gradient(180deg, rgba(248,251,254,0.94) 0%, rgba(239,245,251,0.98) 100%)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.22), 0 8px 18px rgba(24,39,58,0.06)",
+          "linear-gradient(180deg, rgba(16,28,42,0.9) 0%, rgba(9,17,28,0.94) 100%)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.14)",
         padding: "14px",
         cursor: "pointer",
         color: THEME.text,

@@ -11,72 +11,76 @@ import {
   FileCheck2,
   Search,
   Shield,
+  Wrench,
 } from "lucide-react";
 
 const THEME = {
   pageBase:
-    "linear-gradient(180deg, #E2E8EE 0%, #DDE4EB 18%, #D8E0E7 44%, #DCE4EB 72%, #E3E9EF 100%)",
+    "linear-gradient(180deg, #02060B 0%, #030912 16%, #03101B 42%, #020912 72%, #02060B 100%)",
   shell:
-    "linear-gradient(180deg, rgba(233,239,245,0.98) 0%, rgba(226,233,240,0.995) 42%, rgba(221,229,237,1) 100%)",
+    "linear-gradient(180deg, rgba(7,15,25,0.98) 0%, rgba(5,12,20,0.995) 42%, rgba(3,9,15,1) 100%)",
   shellInner:
-    "linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.08) 18%, rgba(255,255,255,0) 40%)",
+    "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 16%, rgba(255,255,255,0) 36%)",
   panel:
-    "linear-gradient(180deg, rgba(245,248,251,0.98) 0%, rgba(239,244,248,0.99) 52%, rgba(234,240,245,1) 100%)",
+    "linear-gradient(180deg, rgba(13,24,37,0.98) 0%, rgba(8,16,27,0.99) 48%, rgba(7,13,22,1) 100%)",
   panelTop:
-    "linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.10) 24%, rgba(255,255,255,0) 62%)",
+    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.012) 24%, rgba(255,255,255,0) 56%)",
   panelEdgeGlow:
-    "radial-gradient(circle at 50% 0%, rgba(47,107,255,0.045) 0%, rgba(47,107,255,0.018) 28%, rgba(47,107,255,0) 60%)",
+    "radial-gradient(circle at 50% 0%, rgba(70,130,255,0.08) 0%, rgba(70,130,255,0.03) 28%, rgba(70,130,255,0) 58%)",
   card:
-    "linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(242,246,250,0.99) 46%, rgba(237,243,248,1) 100%)",
+    "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(14,27,42,0.98) 44%, rgba(10,20,33,1) 100%)",
   cardTop:
-    "linear-gradient(180deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.08) 24%, rgba(255,255,255,0) 60%)",
-  text: "#0F1C2B",
-  textSoft: "#33475B",
-  textMuted: "#62768A",
-  textDim: "#7F92A5",
-  lineFaint: "rgba(15,28,43,0.08)",
-  border: "1px solid rgba(66, 88, 112, 0.13)",
-  borderSoft: "1px solid rgba(66,88,112,0.10)",
-  shellShadow: "0 24px 64px rgba(24,39,58,0.10)",
-  panelShadow: "0 14px 30px rgba(24,39,58,0.08)",
-  cardShadow: "0 8px 18px rgba(24,39,58,0.055)",
-  blue: "#2F6BFF",
-  blueSoft: "rgba(47,107,255,0.10)",
-  blueLine: "rgba(47,107,255,0.75)",
-  steel: "#70869A",
-  steelSoft: "rgba(112,134,154,0.10)",
-  steelLine: "rgba(112,134,154,0.62)",
-  emerald: "#18B39B",
-  emeraldSoft: "rgba(24,179,155,0.10)",
-  emeraldLine: "rgba(24,179,155,0.75)",
+    "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.014) 26%, rgba(255,255,255,0) 58%)",
+  text: "#F5FAFF",
+  textSoft: "#D7E5F0",
+  textMuted: "#9CB1C1",
+  textDim: "#73889A",
+  lineFaint: "rgba(255,255,255,0.032)",
+  border: "1px solid rgba(109, 142, 176, 0.24)",
+  borderSoft: "1px solid rgba(255,255,255,0.085)",
+  shellShadow: "0 34px 90px rgba(0,0,0,0.5)",
+  panelShadow: "0 18px 42px rgba(0,0,0,0.24)",
+  cardShadow: "0 10px 22px rgba(0,0,0,0.16)",
+  blue: "#3B82F6",
+  blueSoft: "rgba(59,130,246,0.16)",
+  blueLine: "rgba(59,130,246,0.84)",
+  emerald: "#27D9BF",
+  emeraldSoft: "rgba(39,217,191,0.18)",
+  emeraldLine: "rgba(39,217,191,0.84)",
+  orange: "#F59E42",
+  orangeSoft: "rgba(245,158,66,0.18)",
+  orangeLine: "rgba(245,158,66,0.84)",
   buttonBlue:
-    "linear-gradient(180deg, rgba(47,107,255,1) 0%, rgba(31,88,224,1) 100%)",
+    "linear-gradient(180deg, rgba(36,126,255,1) 0%, rgba(21,101,219,1) 100%)",
+  buttonEmerald:
+    "linear-gradient(180deg, rgba(39,217,191,1) 0%, rgba(18,173,150,1) 100%)",
 };
 
 const workflow = [
   {
     label: "Intake",
-    sub: "Document condition",
+    sub: "Check-in vehicle",
     icon: <CarFront size={18} strokeWidth={2.2} />,
-    accent: "blue",
   },
   {
     label: "Findings",
-    sub: "Document discoveries",
+    sub: "Document issues",
     icon: <Search size={18} strokeWidth={2.2} />,
-    accent: "steel",
   },
   {
     label: "Approval",
-    sub: "Capture authorization",
+    sub: "Get approval",
     icon: <FileCheck2 size={18} strokeWidth={2.2} />,
-    accent: "blue",
+  },
+  {
+    label: "Repair",
+    sub: "Complete repair",
+    icon: <Wrench size={18} strokeWidth={2.2} />,
   },
   {
     label: "Release",
-    sub: "Close the record",
+    sub: "Deliver vehicle",
     icon: <CheckCircle2 size={18} strokeWidth={2.2} />,
-    accent: "emerald",
   },
 ];
 
@@ -88,8 +92,8 @@ const problemCards = [
   },
   {
     title: "Approvals live in texts, calls, and memory",
-    body: "When findings and authorizations are not tied cleanly to the same record, the story gets messy fast.",
-    accent: "steel",
+    body: "When findings and approvals are not tied cleanly to the job, the story gets messy fast.",
+    accent: "orange",
   },
   {
     title: "Release documentation is often too thin",
@@ -100,55 +104,55 @@ const problemCards = [
 
 const engineCards = [
   {
-    eyebrow: "Checkpoint 1",
-    title: "Intake authorization",
-    body: "Capture the customer, vehicle, VIN, concern, required condition photos, and signed intake authorization at drop-off.",
+    eyebrow: "Step 1",
+    title: "Intake",
+    body: "Capture the customer, vehicle, VIN, concern, required condition photos, and authorization at drop-off.",
     accent: "blue",
   },
   {
-    eyebrow: "Checkpoint 2",
-    title: "Findings + approval",
-    body: "Document what was found, what was recommended, and what the customer approved or declined — all attached to the same visit record.",
-    accent: "steel",
+    eyebrow: "Step 2",
+    title: "Findings + Approval",
+    body: "Document what was found, what is recommended, and what the customer approved — all attached to the same job.",
+    accent: "orange",
   },
   {
-    eyebrow: "Checkpoint 3",
-    title: "Final release",
-    body: "Close the visit with final status, full attribution, signatures, photos, and a permanent release record.",
+    eyebrow: "Step 3",
+    title: "Repair + Release Record",
+    body: "Move the job through the shop and close it with release documentation and a permanent record.",
     accent: "emerald",
   },
 ];
 
 const featureCards = [
   {
-    title: "Vehicle intake + VIN decode",
-    body: "Start a clean record for the visit with customer details, vehicle details, VIN, concern, and intake authorization.",
+    title: "Vehicle intake + VIN workflow",
+    body: "Start a clean record for the visit with customer info, vehicle details, concern, and intake authorization.",
     accent: "blue",
   },
   {
     title: "Required condition photo capture",
-    body: "Build a repeatable intake process so the shop has proof before the vehicle disappears into the dead zone.",
+    body: "Build a habit of consistent photos at drop-off so the shop has proof before work begins.",
     accent: "blue",
   },
   {
-    title: "Findings with attribution",
-    body: "Tie notes, discoveries, and optional supporting photos directly to the record and the person who documented them.",
-    accent: "steel",
+    title: "Findings and approvals attached to the job",
+    body: "Keep approvals tied directly to what was found and what was authorized.",
+    accent: "orange",
   },
   {
-    title: "Signed customer checkpoints",
-    body: "Bring the customer in only where liability matters most: intake, approval, and final release.",
-    accent: "steel",
+    title: "Live workflow visibility",
+    body: "Track vehicles that need intake, are in progress, waiting on parts, or ready for pickup.",
+    accent: "emerald",
   },
   {
     title: "Final release documentation",
-    body: "Close the loop with release acknowledgment, final status, signatures, and a stronger end-of-visit record.",
+    body: "Close the loop with release confirmation, final photos, and a cleaner handoff story.",
     accent: "emerald",
   },
   {
     title: "Built for real shops",
-    body: "Made for office, service writer, porter, and shop-floor use — without turning into full shop management software.",
-    accent: "blue",
+    body: "Made for office, service writer, porter, and shop-floor use — not just a pretty dashboard.",
+    accent: "orange",
   },
 ];
 
@@ -161,14 +165,14 @@ const overviewCards = [
   },
   {
     title: "What the shop gets",
-    body: "A cleaner liability story, stronger accountability, and a permanent record of what happened from drop-off to pickup.",
+    body: "A cleaner workflow, stronger accountability, and a permanent story for what happened from drop-off to pickup.",
     accent: "emerald",
     image: "/images/equipment-proof.jpg",
   },
   {
     title: "What the record proves",
     body: "What the vehicle looked like, what was found, what was approved, and how it left the shop.",
-    accent: "steel",
+    accent: "orange",
     image: "/images/fleetproof-inspection.png",
   },
 ];
@@ -179,22 +183,22 @@ export default function ShopProofPage() {
       style={{
         minHeight: "100vh",
         backgroundImage: `
-          radial-gradient(circle at 50% 0%, rgba(47,107,255,0.06) 0%, rgba(47,107,255,0.02) 18%, rgba(47,107,255,0) 42%),
-          radial-gradient(circle at 0% 100%, rgba(24,179,155,0.025) 0%, rgba(24,179,155,0.01) 18%, rgba(24,179,155,0) 36%),
-          radial-gradient(circle at 100% 12%, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.10) 14%, rgba(255,255,255,0) 30%),
+          radial-gradient(circle at 50% 0%, rgba(57,122,255,0.18) 0%, rgba(57,122,255,0.06) 18%, rgba(57,122,255,0) 40%),
+          radial-gradient(circle at 0% 100%, rgba(39,217,191,0.06) 0%, rgba(39,217,191,0.02) 18%, rgba(39,217,191,0) 36%),
+          radial-gradient(circle at 100% 12%, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 12%, rgba(255,255,255,0) 30%),
           repeating-linear-gradient(
             0deg,
-            rgba(15,28,43,0.018) 0px,
-            rgba(15,28,43,0.018) 1px,
+            rgba(255,255,255,0.012) 0px,
+            rgba(255,255,255,0.012) 1px,
             transparent 1px,
-            transparent 48px
+            transparent 46px
           ),
           repeating-linear-gradient(
             90deg,
-            rgba(15,28,43,0.012) 0px,
-            rgba(15,28,43,0.012) 1px,
+            rgba(255,255,255,0.006) 0px,
+            rgba(255,255,255,0.006) 1px,
             transparent 1px,
-            transparent 78px
+            transparent 74px
           ),
           ${THEME.pageBase}
         `,
@@ -221,9 +225,16 @@ export default function ShopProofPage() {
             pointerEvents: "none",
             background: `
               ${THEME.shellInner},
-              radial-gradient(circle at 50% 0%, rgba(47,107,255,0.05) 0%, rgba(47,107,255,0.018) 22%, rgba(47,107,255,0) 48%)
+              radial-gradient(circle at 50% 0%, rgba(71,123,255,0.14) 0%, rgba(71,123,255,0.05) 20%, rgba(71,123,255,0) 44%),
+              repeating-linear-gradient(
+                135deg,
+                rgba(255,255,255,0.012) 0px,
+                rgba(255,255,255,0.012) 1px,
+                transparent 1px,
+                transparent 9px
+              )
             `,
-            opacity: 1,
+            opacity: 0.95,
           }}
         />
 
@@ -246,13 +257,13 @@ export default function ShopProofPage() {
 
           <SectionTitle
             title="The ShopPROOF engine"
-            rightText="Three core checkpoints"
+            rightText="Simple structure behind the workflow"
           />
           <ThreeCardGrid cards={engineCards} />
 
           <SectionTitle
             title="What ShopPROOF does"
-            rightText="Locked V1 scope"
+            rightText="Core current product focus"
           />
           <FeatureGrid />
 
@@ -282,9 +293,6 @@ function TopBar() {
         borderBottom: `1px solid ${THEME.lineFaint}`,
         position: "relative",
         zIndex: 2,
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 100%)",
-        backdropFilter: "blur(8px)",
       }}
     >
       <Link href="/" style={{ textDecoration: "none" }}>
@@ -305,9 +313,10 @@ function TopBar() {
               letterSpacing: "-0.01em",
               color: THEME.textSoft,
               background:
-                "linear-gradient(180deg, rgba(248,250,252,0.92) 0%, rgba(236,242,247,0.96) 100%)",
-              border: "1px solid rgba(47,107,255,0.12)",
-              boxShadow: "0 4px 10px rgba(24,39,58,0.04)",
+                "linear-gradient(180deg, rgba(18,30,44,0.96) 0%, rgba(10,17,28,0.98) 100%)",
+              border: "1px solid rgba(59,130,246,0.24)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.04), 0 0 16px rgba(59,130,246,0.12)",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
@@ -326,9 +335,10 @@ function TopBar() {
               letterSpacing: "-0.01em",
               color: THEME.text,
               background:
-                "linear-gradient(180deg, rgba(250,252,254,0.96) 0%, rgba(239,244,248,0.98) 100%)",
-              border: "1px solid rgba(47,107,255,0.16)",
-              boxShadow: "0 4px 10px rgba(24,39,58,0.04)",
+                "linear-gradient(180deg, rgba(19,34,51,0.98) 0%, rgba(10,20,33,1) 100%)",
+              border: "1px solid rgba(59,130,246,0.34)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 22px rgba(59,130,246,0.22)",
               display: "inline-flex",
               alignItems: "center",
             }}
@@ -357,10 +367,10 @@ function TopBar() {
               fontSize: 12,
               fontWeight: 900,
               color: "#F7FBFF",
-              border: "1px solid rgba(47,107,255,0.20)",
+              border: "1px solid rgba(59,130,246,0.34)",
               background: THEME.buttonBlue,
               boxShadow:
-                "0 8px 16px rgba(31,49,71,0.08), inset 0 1px 0 rgba(255,255,255,0.18)",
+                "inset 0 1px 0 rgba(255,255,255,0.12), 0 0 18px rgba(59,130,246,0.22), 0 10px 18px rgba(0,0,0,0.12)",
             }}
           >
             Subscribe
@@ -379,10 +389,11 @@ function TopBar() {
               fontSize: 12,
               fontWeight: 900,
               color: THEME.textSoft,
-              border: THEME.borderSoft,
+              border: "1px solid rgba(59,130,246,0.28)",
               background:
-                "linear-gradient(180deg, rgba(248,250,252,0.94) 0%, rgba(237,242,247,0.96) 100%)",
-              boxShadow: "0 6px 12px rgba(24,39,58,0.04)",
+                "linear-gradient(180deg, rgba(18,29,41,0.98) 0%, rgba(10,18,28,0.98) 100%)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.04), 0 0 14px rgba(59,130,246,0.14)",
             }}
           >
             Login
@@ -408,7 +419,7 @@ function HeroSection() {
             display: "grid",
             gap: 14,
             alignContent: "start",
-            minHeight: 356,
+            minHeight: 300,
           }}
         >
           <span
@@ -419,30 +430,32 @@ function HeroSection() {
               minHeight: 28,
               padding: "0 12px",
               borderRadius: 999,
-              background: THEME.blueSoft,
-              border: "1px solid rgba(47,107,255,0.14)",
-              color: THEME.blue,
+              background: "rgba(92,104,255,0.12)",
+              border: "1px solid rgba(124,136,255,0.22)",
+              color: "#C6D0FF",
               fontSize: 11,
               fontWeight: 900,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
+              boxShadow: "0 0 18px rgba(92,104,255,0.16)",
             }}
           >
-            Evidence-first documentation
+            Evidence-first shop workflow
           </span>
 
           <div
             style={{
-              fontSize: 38,
+              fontSize: 36,
               lineHeight: 0.94,
               fontWeight: 950,
               letterSpacing: "-0.06em",
-              maxWidth: 640,
+              maxWidth: 620,
+              textShadow: "0 4px 28px rgba(0,0,0,0.28)",
             }}
           >
             Document Every Vehicle.
             <br />
-            Protect Every Visit.
+            Protect Every Repair.
           </div>
 
           <p
@@ -450,13 +463,13 @@ function HeroSection() {
               margin: 0,
               maxWidth: 620,
               fontSize: 15,
-              lineHeight: 1.68,
+              lineHeight: 1.65,
               color: THEME.textSoft,
             }}
           >
-            ShopPROOF creates a time-stamped, attributed record from drop-off
-            to release with required photos, signed checkpoints, and a clean
-            permanent trail of what happened.
+            ShopPROOF is a repair shop workflow for intake, findings,
+            approvals, repair visibility, and release documentation — built to
+            create a clean permanent record for every vehicle visit.
           </p>
 
           <div
@@ -467,7 +480,7 @@ function HeroSection() {
               marginTop: 2,
             }}
           >
-            <span style={primaryButtonStyle}>Proof at every handoff</span>
+            <span style={primaryButtonStyle}>Built for real shop intake</span>
             <span style={secondaryButtonStyle}>Permanent record focus</span>
           </div>
 
@@ -481,11 +494,11 @@ function HeroSection() {
           >
             <MiniMetric
               label="Current model"
-              value="Intake → Findings → Approval → Release"
+              value="Intake → Approval → Repair → Release"
             />
             <MiniMetric
-              label="Customer appears"
-              value="Only at liability boundaries"
+              label="Built for"
+              value="Real shop intake and accountability"
             />
             <MiniMetric
               label="Primary outcome"
@@ -505,55 +518,65 @@ function VisualPanel() {
     <Panel>
       <div
         style={{
-          display: "grid",
-          gap: 12,
+          minHeight: 300,
+          borderRadius: 18,
+          overflow: "hidden",
+          position: "relative",
+          border: "1px solid rgba(255,255,255,0.10)",
+          background:
+            "linear-gradient(180deg, rgba(5,15,24,0.92) 0%, rgba(4,10,18,0.97) 100%)",
+          boxShadow:
+            "0 18px 42px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)",
         }}
       >
-        <div
+        <img
+          src="/images/shopproof-hero.png"
+          alt="ShopPROOF visual"
           style={{
-            minHeight: 278,
-            borderRadius: 18,
-            overflow: "hidden",
-            position: "relative",
-            border: "1px solid rgba(66,88,112,0.12)",
-            background:
-              "linear-gradient(180deg, rgba(219,228,237,0.92) 0%, rgba(211,222,232,0.97) 100%)",
-            boxShadow: "0 10px 22px rgba(24,39,58,0.07)",
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            filter: "contrast(1.05) saturate(0.98) brightness(0.72) blur(0.25px)",
+            transform: "scale(1.02)",
           }}
-        >
-          <img
-            src="/images/shopproof-hero.png"
-            alt="ShopPROOF visual"
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              filter: "contrast(1.02) saturate(0.98) brightness(0.95)",
-              transform: "scale(1.01)",
-            }}
-          />
-
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: `
-                linear-gradient(180deg, rgba(255,255,255,0.04), rgba(15,28,43,0.12)),
-                linear-gradient(90deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 34%, rgba(15,28,43,0.04) 100%),
-                radial-gradient(circle at 18% 18%, rgba(47,107,255,0.08) 0%, rgba(47,107,255,0.025) 28%, rgba(47,107,255,0) 54%)
-              `,
-            }}
-          />
-        </div>
+        />
 
         <div
           style={{
+            position: "absolute",
+            inset: 0,
+            background: `
+              linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.58)),
+              linear-gradient(90deg, rgba(3,10,18,0.22) 0%, rgba(3,10,18,0.08) 34%, rgba(3,10,18,0.16) 100%),
+              radial-gradient(circle at 18% 18%, rgba(59,130,246,0.16) 0%, rgba(59,130,246,0.05) 28%, rgba(59,130,246,0) 52%),
+              radial-gradient(circle at 82% 16%, rgba(92,104,255,0.14) 0%, rgba(92,104,255,0.05) 24%, rgba(92,104,255,0) 46%),
+              radial-gradient(circle at 78% 82%, rgba(59,130,246,0.16) 0%, rgba(59,130,246,0.06) 22%, rgba(59,130,246,0) 44%)
+            `,
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 1,
+            borderRadius: 17,
+            border: "1px solid rgba(255,255,255,0.035)",
+            pointerEvents: "none",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            left: 16,
+            right: 16,
+            bottom: 16,
             display: "grid",
             gridTemplateColumns: "1fr auto",
             gap: 10,
-            alignItems: "center",
+            alignItems: "end",
           }}
         >
           <div
@@ -569,7 +592,7 @@ function VisualPanel() {
             />
             <GlassChip
               icon={<ClipboardCheck size={14} strokeWidth={2.2} />}
-              label="Signed checkpoints"
+              label="Signed approvals"
             />
             <GlassChip
               icon={<Shield size={14} strokeWidth={2.2} />}
@@ -581,19 +604,22 @@ function VisualPanel() {
             <span
               title="Enter"
               style={{
-                width: 44,
-                height: 44,
+                width: 42,
+                height: 42,
                 borderRadius: 999,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#FFFFFF",
-                border: "1px solid rgba(47,107,255,0.18)",
-                background: THEME.buttonBlue,
-                boxShadow: "0 8px 16px rgba(31,49,71,0.08)",
+                color: THEME.text,
+                border: "1px solid rgba(255,255,255,0.18)",
+                background:
+                  "linear-gradient(180deg, rgba(18,30,44,0.96) 0%, rgba(10,17,28,0.98) 100%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.05), 0 0 18px rgba(59,130,246,0.18), 0 10px 18px rgba(0,0,0,0.18)",
+                backdropFilter: "blur(10px)",
               }}
             >
-              <Shield size={16} strokeWidth={2.2} />
+              <Wrench size={16} strokeWidth={2.2} />
             </span>
           </Link>
         </div>
@@ -608,94 +634,90 @@ function WorkflowStrip() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
           gap: 10,
         }}
       >
-        {workflow.map((item, index) => {
-          const tone = getAccentTone(item.accent);
+        {workflow.map((item, index) => (
+          <div
+            key={item.label}
+            style={{
+              position: "relative",
+              minHeight: 92,
+              padding: "12px 12px 12px 14px",
+              borderRadius: 14,
+              background: THEME.card,
+              border: THEME.borderSoft,
+              boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
+              overflow: "hidden",
+            }}
+          >
+            <CardTexture />
 
-          return (
+            {index < workflow.length - 1 ? (
+              <div
+                style={{
+                  position: "absolute",
+                  right: -7,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  zIndex: 2,
+                  color: THEME.textDim,
+                }}
+              >
+                <ArrowRight size={16} strokeWidth={2.6} />
+              </div>
+            ) : null}
+
             <div
-              key={item.label}
               style={{
                 position: "relative",
-                minHeight: 92,
-                padding: "12px 12px 12px 14px",
-                borderRadius: 14,
-                background: THEME.card,
-                border: THEME.borderSoft,
-                boxShadow: THEME.cardShadow,
-                overflow: "hidden",
+                zIndex: 1,
+                display: "grid",
+                gap: 8,
               }}
             >
-              <CardTexture />
-
-              {index < workflow.length - 1 ? (
-                <div
-                  style={{
-                    position: "absolute",
-                    right: -7,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    zIndex: 2,
-                    color: THEME.textDim,
-                  }}
-                >
-                  <ArrowRight size={16} strokeWidth={2.6} />
-                </div>
-              ) : null}
+              <span
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: THEME.blue,
+                  background: THEME.blueSoft,
+                  border: "1px solid rgba(59,130,246,0.24)",
+                  boxShadow: "0 0 14px rgba(59,130,246,0.12)",
+                }}
+              >
+                {item.icon}
+              </span>
 
               <div
                 style={{
-                  position: "relative",
-                  zIndex: 1,
-                  display: "grid",
-                  gap: 8,
+                  fontSize: 16,
+                  lineHeight: 1,
+                  fontWeight: 900,
+                  letterSpacing: "-0.03em",
                 }}
               >
-                <span
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 10,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: tone.color,
-                    background: tone.soft,
-                    border: `1px solid ${tone.border}`,
-                    boxShadow: `0 0 10px ${tone.glow}`,
-                  }}
-                >
-                  {item.icon}
-                </span>
+                {item.label}
+              </div>
 
-                <div
-                  style={{
-                    fontSize: 16,
-                    lineHeight: 1,
-                    fontWeight: 900,
-                    letterSpacing: "-0.03em",
-                  }}
-                >
-                  {item.label}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: THEME.textMuted,
-                    fontWeight: 800,
-                    lineHeight: 1.35,
-                  }}
-                >
-                  {item.sub}
-                </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: THEME.textMuted,
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                }}
+              >
+                {item.sub}
               </div>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </Panel>
   );
@@ -725,6 +747,7 @@ function SectionTitle({
           lineHeight: 1,
           fontWeight: 950,
           letterSpacing: "-0.05em",
+          textShadow: "0 2px 14px rgba(0,0,0,0.22)",
         }}
       >
         {title}
@@ -803,120 +826,140 @@ function OverviewGrid() {
         gap: 14,
       }}
     >
-      {overviewCards.map((card) => {
-        const tone = getAccentTone(card.accent);
-
-        return (
+      {overviewCards.map((card) => (
+        <div
+          key={card.title}
+          style={{
+            minHeight: 250,
+            borderRadius: 18,
+            overflow: "hidden",
+            background: THEME.panel,
+            border: THEME.border,
+            boxShadow: THEME.panelShadow,
+            position: "relative",
+          }}
+        >
           <div
-            key={card.title}
             style={{
-              minHeight: 250,
-              borderRadius: 18,
-              overflow: "hidden",
-              background: THEME.panel,
-              border: THEME.border,
-              boxShadow: THEME.panelShadow,
+              position: "absolute",
+              inset: 0,
+              background: `${THEME.panelTop}, ${THEME.panelEdgeGlow}`,
+              opacity: 0.95,
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 1,
+              borderRadius: 17,
+              border: "1px solid rgba(255,255,255,0.035)",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div
+            style={{
               position: "relative",
+              zIndex: 1,
+              padding: 16,
+              display: "grid",
+              gap: 12,
+              height: "100%",
             }}
           >
             <div
               style={{
-                position: "absolute",
-                inset: 0,
-                background: `${THEME.panelTop}, ${THEME.panelEdgeGlow}`,
-                opacity: 1,
-                pointerEvents: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                alignSelf: "flex-start",
+                minHeight: 24,
+                padding: "0 10px",
+                borderRadius: 999,
+                background:
+                  card.accent === "emerald"
+                    ? THEME.emeraldSoft
+                    : card.accent === "orange"
+                      ? THEME.orangeSoft
+                      : THEME.blueSoft,
+                border:
+                  card.accent === "emerald"
+                    ? "1px solid rgba(39,217,191,0.22)"
+                    : card.accent === "orange"
+                      ? "1px solid rgba(245,158,66,0.22)"
+                      : "1px solid rgba(59,130,246,0.22)",
+                color:
+                  card.accent === "emerald"
+                    ? "#9DF4E7"
+                    : card.accent === "orange"
+                      ? "#FFD39E"
+                      : "#AFCFFF",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
               }}
-            />
+            >
+              {card.title}
+            </div>
 
             <div
               style={{
+                height: 108,
+                borderRadius: 14,
+                overflow: "hidden",
                 position: "relative",
-                zIndex: 1,
-                padding: 16,
-                display: "grid",
-                gap: 12,
-                height: "100%",
+                border: "1px solid rgba(255,255,255,0.07)",
+                background:
+                  "linear-gradient(180deg, rgba(15,27,40,0.96) 0%, rgba(7,14,24,0.98) 100%)",
               }}
             >
-              <div
+              <img
+                src={card.image}
+                alt=""
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  alignSelf: "flex-start",
-                  minHeight: 24,
-                  padding: "0 10px",
-                  borderRadius: 999,
-                  background: tone.soft,
-                  border: `1px solid ${tone.border}`,
-                  color: tone.text,
-                  fontSize: 11,
-                  fontWeight: 900,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  filter: "contrast(1.04) saturate(0.92) brightness(0.72)",
                 }}
-              >
-                {card.title}
-              </div>
-
+              />
               <div
                 style={{
-                  height: 108,
-                  borderRadius: 14,
-                  overflow: "hidden",
-                  position: "relative",
-                  border: "1px solid rgba(66,88,112,0.10)",
+                  position: "absolute",
+                  inset: 0,
                   background:
-                    "linear-gradient(180deg, rgba(223,232,240,0.96) 0%, rgba(214,224,233,0.98) 100%)",
+                    "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(8,15,24,0.08) 26%, rgba(8,15,24,0.42) 100%)",
                 }}
-              >
-                <img
-                  src={card.image}
-                  alt=""
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    filter: "contrast(1.02) saturate(0.94) brightness(0.88)",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(15,28,43,0.04) 28%, rgba(15,28,43,0.14) 100%)",
-                  }}
-                />
-              </div>
+              />
+            </div>
 
-              <div
-                style={{
-                  fontSize: 34,
-                  lineHeight: 0.96,
-                  fontWeight: 950,
-                  letterSpacing: "-0.05em",
-                  marginTop: 2,
-                }}
-              >
-                {card.title}
-              </div>
+            <div
+              style={{
+                fontSize: 34,
+                lineHeight: 0.96,
+                fontWeight: 950,
+                letterSpacing: "-0.05em",
+                marginTop: 2,
+              }}
+            >
+              {card.title}
+            </div>
 
-              <div
-                style={{
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  color: THEME.textSoft,
-                }}
-              >
-                {card.body}
-              </div>
+            <div
+              style={{
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: THEME.textSoft,
+              }}
+            >
+              {card.body}
             </div>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -932,7 +975,27 @@ function FeatureCard({
   accent: string;
   eyebrow?: string;
 }) {
-  const tone = getAccentTone(accent);
+  const tone =
+    accent === "emerald"
+      ? {
+          line: THEME.emeraldLine,
+          soft: THEME.emeraldSoft,
+          border: "rgba(39,217,191,0.22)",
+          color: "#9DF4E7",
+        }
+      : accent === "orange"
+        ? {
+            line: THEME.orangeLine,
+            soft: THEME.orangeSoft,
+            border: "rgba(245,158,66,0.22)",
+            color: "#FFD39E",
+          }
+        : {
+            line: THEME.blueLine,
+            soft: THEME.blueSoft,
+            border: "rgba(59,130,246,0.22)",
+            color: "#AFCFFF",
+          };
 
   return (
     <div
@@ -951,7 +1014,7 @@ function FeatureCard({
           position: "absolute",
           inset: 0,
           background: `${THEME.panelTop}, ${THEME.panelEdgeGlow}`,
-          opacity: 1,
+          opacity: 0.95,
           pointerEvents: "none",
         }}
       />
@@ -964,6 +1027,15 @@ function FeatureCard({
           width: 3,
           background: tone.line,
           boxShadow: `0 0 12px ${tone.line}`,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 1,
+          borderRadius: 17,
+          border: "1px solid rgba(255,255,255,0.035)",
+          pointerEvents: "none",
         }}
       />
 
@@ -987,7 +1059,7 @@ function FeatureCard({
               borderRadius: 999,
               background: tone.soft,
               border: `1px solid ${tone.border}`,
-              color: tone.text,
+              color: tone.color,
               fontSize: 11,
               fontWeight: 900,
               letterSpacing: "0.04em",
@@ -1037,7 +1109,7 @@ function MiniMetric({
         borderRadius: 14,
         background: THEME.card,
         border: THEME.borderSoft,
-        boxShadow: THEME.cardShadow,
+        boxShadow: `${THEME.cardShadow}, inset 0 1px 0 rgba(255,255,255,0.03)`,
         padding: "12px 12px 10px",
         position: "relative",
         overflow: "hidden",
@@ -1088,7 +1160,7 @@ function GlassChip({
   return (
     <div
       style={{
-        minHeight: 38,
+        minHeight: 36,
         padding: "0 10px",
         borderRadius: 10,
         display: "inline-flex",
@@ -1097,10 +1169,12 @@ function GlassChip({
         color: THEME.textSoft,
         fontSize: 12,
         fontWeight: 900,
-        border: THEME.borderSoft,
+        border: "1px solid rgba(255,255,255,0.12)",
         background:
-          "linear-gradient(180deg, rgba(248,250,252,0.92) 0%, rgba(238,243,247,0.96) 100%)",
-        boxShadow: "0 6px 12px rgba(24,39,58,0.04)",
+          "linear-gradient(180deg, rgba(17,29,43,0.62) 0%, rgba(10,17,27,0.72) 100%)",
+        backdropFilter: "blur(12px)",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 16px rgba(0,0,0,0.16), 0 0 14px rgba(59,130,246,0.08)",
       }}
     >
       {icon}
@@ -1119,8 +1193,8 @@ function BottomNote() {
         padding: "4px 2px 2px",
       }}
     >
-      Every ShopPROOF job should end with a stronger story: documented
-      condition, attributed findings, captured approval, and a cleaner final
+      Every ShopPROOF job should end with a stronger story: intake condition,
+      documented findings, captured approvals, repair visibility, and a cleaner
       release record.
     </div>
   );
@@ -1144,59 +1218,48 @@ function Panel({ children }: { children: ReactNode }) {
           inset: 0,
           pointerEvents: "none",
           background: `${THEME.panelTop}, ${THEME.panelEdgeGlow}`,
-          opacity: 1,
+          opacity: 0.95,
         }}
       />
-      <div style={{ padding: 16, position: "relative", zIndex: 1 }}>{children}</div>
+      <div
+        style={{
+          position: "absolute",
+          inset: 1,
+          borderRadius: 17,
+          pointerEvents: "none",
+          border: "1px solid rgba(255,255,255,0.035)",
+        }}
+      />
+      <div style={{ padding: 16, position: "relative", zIndex: 1 }}>
+        {children}
+      </div>
     </section>
   );
 }
 
 function CardTexture() {
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        background: THEME.cardTop,
-        opacity: 1,
-      }}
-    />
+    <>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background: THEME.cardTop,
+          opacity: 0.95,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 1,
+          borderRadius: 13,
+          pointerEvents: "none",
+          border: "1px solid rgba(255,255,255,0.03)",
+        }}
+      />
+    </>
   );
-}
-
-function getAccentTone(accent: string) {
-  if (accent === "emerald") {
-    return {
-      color: THEME.emerald,
-      soft: THEME.emeraldSoft,
-      line: THEME.emeraldLine,
-      border: "rgba(24,179,155,0.16)",
-      text: "#147D6C",
-      glow: "rgba(24,179,155,0.08)",
-    };
-  }
-
-  if (accent === "steel") {
-    return {
-      color: THEME.steel,
-      soft: THEME.steelSoft,
-      line: THEME.steelLine,
-      border: "rgba(112,134,154,0.14)",
-      text: "#5C7286",
-      glow: "rgba(112,134,154,0.06)",
-    };
-  }
-
-  return {
-    color: THEME.blue,
-    soft: THEME.blueSoft,
-    line: THEME.blueLine,
-    border: "rgba(47,107,255,0.16)",
-    text: "#2A58CC",
-    glow: "rgba(47,107,255,0.08)",
-  };
 }
 
 const primaryButtonStyle: CSSProperties = {
@@ -1204,7 +1267,7 @@ const primaryButtonStyle: CSSProperties = {
   padding: "0 16px",
   borderRadius: 10,
   background: THEME.buttonBlue,
-  border: "1px solid rgba(47,107,255,0.18)",
+  border: "1px solid rgba(59,130,246,0.34)",
   color: "#F7FBFF",
   fontSize: 13,
   fontWeight: 900,
@@ -1212,7 +1275,8 @@ const primaryButtonStyle: CSSProperties = {
   alignItems: "center",
   gap: 8,
   whiteSpace: "nowrap",
-  boxShadow: "0 8px 16px rgba(31,49,71,0.08)",
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,0.12), 0 0 18px rgba(59,130,246,0.22), 0 10px 20px rgba(0,0,0,0.16)",
 };
 
 const secondaryButtonStyle: CSSProperties = {
@@ -1220,7 +1284,7 @@ const secondaryButtonStyle: CSSProperties = {
   padding: "0 16px",
   borderRadius: 10,
   background:
-    "linear-gradient(180deg, rgba(248,250,252,0.94) 0%, rgba(237,242,247,0.96) 100%)",
+    "linear-gradient(180deg, rgba(24,39,56,0.98) 0%, rgba(11,20,30,0.98) 100%)",
   border: THEME.borderSoft,
   color: THEME.textSoft,
   fontSize: 13,
@@ -1228,5 +1292,6 @@ const secondaryButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   whiteSpace: "nowrap",
-  boxShadow: "0 8px 14px rgba(24,39,58,0.04)",
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,0.04), 0 10px 18px rgba(0,0,0,0.14)",
 };

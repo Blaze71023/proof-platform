@@ -744,7 +744,7 @@ export default function HomePage() {
               }}
             >
               <Image
-                src="/images/proof-platform.png"
+                src="/images/proof-platform-hero.png"
                 alt="PROOF Platform documentation engine"
                 fill
                 style={{
