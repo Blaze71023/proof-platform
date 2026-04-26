@@ -6,12 +6,9 @@ import { getJobs, updateJob } from "@/lib/shopproof";
 
 type AnyJob = any;
 
-const PAGE_BG =
-  "linear-gradient(180deg, #e8eef5 0%, #dfe7f0 42%, #d8e1eb 100%)";
-const PANEL_BG =
-  "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,252,0.98) 100%)";
-const STATUS_BAND_BG =
-  "linear-gradient(135deg, #142235 0%, #1d334d 48%, #244463 100%)";
+const PAGE_BG = "linear-gradient(180deg, #e8eef5 0%, #dfe7f0 42%, #d8e1eb 100%)";
+const PANEL_BG = "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,249,252,0.98) 100%)";
+const STATUS_BAND_BG = "linear-gradient(135deg, #142235 0%, #1d334d 48%, #244463 100%)";
 
 const TEXT_MAIN = "#0f172a";
 const TEXT_SOFT = "#334155";
@@ -19,13 +16,8 @@ const TEXT_MUTED = "#64748b";
 
 function formatMoney(value: any) {
   if (value === null || value === undefined || value === "") return "—";
-
   const num = Number(value);
-
-  if (!Number.isNaN(num)) {
-    return "$" + num.toFixed(2);
-  }
-
+  if (!Number.isNaN(num)) return "$" + num.toFixed(2);
   return "$" + String(value);
 }
 
@@ -54,30 +46,30 @@ export default function FinalPage() {
 
   const vehicleLabel = useMemo(() => {
     if (!job?.vehicle) return "Vehicle";
-    return `${job.vehicle.year || ""} ${job.vehicle.make || ""} ${
-      job.vehicle.model || ""
-    }`;
+    const { year = "", make = "", model = "" } = job.vehicle;
+    return `${year} ${make} ${model}`.trim() || "Vehicle record";
   }, [job]);
 
-  if (loading) {
-    return <div style={centerStyle}>Loading...</div>;
-  }
+  // Combined name logic since intake uses firstName/lastName
+  const displayName = useMemo(() => {
+    if (!job?.customer) return "Customer";
+    const { firstName = "", lastName = "", name = "" } = job.customer;
+    return (firstName || lastName) ? `${firstName} ${lastName}`.trim() : name || "Customer";
+  }, [job]);
 
-  if (!job) {
-    return <div style={centerStyle}>Record not found</div>;
-  }
+  if (loading) return <div style={centerStyle}>Loading...</div>;
+  if (!job) return <div style={centerStyle}>Record not found</div>;
 
   if (submitted) {
     return (
       <div style={centerStyle}>
-        Final release recorded for {job?.customer?.name || "Customer"}
+        Final release recorded for {displayName}
       </div>
     );
   }
 
   const handleSubmit = () => {
     if (!releaseName.trim()) return;
-
     const updated = {
       ...job,
       final: {
@@ -87,7 +79,6 @@ export default function FinalPage() {
         releasedByCustomerName: releaseName.trim(),
       },
     };
-
     updateJob(updated);
     setJob(updated);
     setSubmitted(true);
@@ -98,34 +89,34 @@ export default function FinalPage() {
       <div style={containerStyle}>
         <h1 style={titleStyle}>Final Release</h1>
 
-        {/* STATUS BAND */}
         <div style={statusBandStyle}>
           <div style={statusItem}>
             <div style={statusLabel}>Vehicle</div>
             <div style={statusValue}>{vehicleLabel}</div>
           </div>
-
           <div style={statusItem}>
             <div style={statusLabel}>Customer</div>
-            <div style={statusValue}>{job?.customer?.name}</div>
+            <div style={statusValue}>{displayName}</div>
           </div>
-
           <div style={statusItem}>
             <div style={statusLabel}>Total</div>
-            <div style={statusValue}>
-              {formatMoney(job?.totals?.total)}
-            </div>
+            <div style={statusValue}>{formatMoney(job?.totals?.total || job?.estimate?.total)}</div>
           </div>
-
           <div style={statusItem}>
             <div style={statusLabel}>Created</div>
-            <div style={statusValue}>
-              {formatDateTime(job?.createdAt)}
-            </div>
+            <div style={statusValue}>{formatDateTime(job?.createdAt)}</div>
           </div>
         </div>
 
         <div style={cardStyle}>
+          {/* Added VIN Section here */}
+          <div style={{ marginBottom: 20, paddingBottom: 15, borderBottom: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: 10, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: 1 }}>Vehicle Identification Number</div>
+            <div style={{ fontSize: 18, fontFamily: "monospace", fontWeight: 700, color: "#1e293b", marginTop: 4 }}>
+              {job?.vehicle?.vin || "No VIN Recorded"}
+            </div>
+          </div>
+
           <p style={textStyle}>
             I acknowledge that I am receiving the vehicle and accept its
             condition as documented.
@@ -134,7 +125,7 @@ export default function FinalPage() {
           <input
             value={releaseName}
             onChange={(e) => setReleaseName(e.target.value)}
-            placeholder="Customer Name"
+            placeholder="Sign your name"
             style={inputStyle}
           />
 
@@ -148,79 +139,15 @@ export default function FinalPage() {
 }
 
 /* STYLES */
-
-const pageStyle: CSSProperties = {
-  minHeight: "100vh",
-  background: PAGE_BG,
-  padding: 20,
-  fontFamily: "Inter, sans-serif",
-};
-
-const containerStyle: CSSProperties = {
-  maxWidth: 900,
-  margin: "0 auto",
-};
-
-const titleStyle: CSSProperties = {
-  fontSize: 32,
-  marginBottom: 20,
-  color: TEXT_MAIN,
-};
-
-const statusBandStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, 1fr)",
-  background: STATUS_BAND_BG,
-  borderRadius: 12,
-  padding: 14,
-  marginBottom: 20,
-  color: "white",
-};
-
-const statusItem: CSSProperties = {
-  textAlign: "center",
-};
-
-const statusLabel: CSSProperties = {
-  fontSize: 10,
-  opacity: 0.7,
-};
-
-const statusValue: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
-};
-
-const cardStyle: CSSProperties = {
-  background: PANEL_BG,
-  padding: 20,
-  borderRadius: 12,
-};
-
-const textStyle: CSSProperties = {
-  marginBottom: 16,
-  color: TEXT_SOFT,
-};
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: 12,
-  marginBottom: 12,
-};
-
-const buttonStyle: CSSProperties = {
-  width: "100%",
-  padding: 14,
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  borderRadius: 8,
-  cursor: "pointer",
-};
-
-const centerStyle: CSSProperties = {
-  height: "100vh",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
+const pageStyle: CSSProperties = { minHeight: "100vh", background: PAGE_BG, padding: 20, fontFamily: "Inter, sans-serif" };
+const containerStyle: CSSProperties = { maxWidth: 900, margin: "0 auto" };
+const titleStyle: CSSProperties = { fontSize: 32, marginBottom: 20, color: TEXT_MAIN, fontWeight: 800 };
+const statusBandStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", background: STATUS_BAND_BG, borderRadius: 12, padding: 16, marginBottom: 20, color: "white" };
+const statusItem: CSSProperties = { textAlign: "left", padding: "0 10px" };
+const statusLabel: CSSProperties = { fontSize: 10, opacity: 0.7, textTransform: "uppercase", marginBottom: 4 };
+const statusValue: CSSProperties = { fontSize: 14, fontWeight: 700 };
+const cardStyle: CSSProperties = { background: PANEL_BG, padding: 30, borderRadius: 16, boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)" };
+const textStyle: CSSProperties = { marginBottom: 20, color: TEXT_SOFT, lineHeight: 1.5 };
+const inputStyle: CSSProperties = { width: "100%", padding: 14, marginBottom: 16, borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 16 };
+const buttonStyle: CSSProperties = { width: "100%", padding: 16, background: "#2563eb", color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 16 };
+const centerStyle: CSSProperties = { height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: TEXT_MAIN, fontWeight: 600 };
