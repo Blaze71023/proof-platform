@@ -1,8 +1,3 @@
-Here is the corrected code. I have applied the fix to the `formatMoney` function and ensured that the template literals are parsed correctly. 
-
-I’ve also closed the file properly since the previous version cut off at the bottom.
-
-```tsx
 "use client";
 
 import { CSSProperties, useEffect, useMemo, useState } from "react";
