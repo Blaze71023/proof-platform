@@ -41,6 +41,9 @@ type VehicleRow = {
   vin?: string | null;
   plate?: string | null;
   customer_id?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  mileage_in?: string | null;
   created_at?: string | null;
 };
 
@@ -58,6 +61,13 @@ type JobRow = {
   findings?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+
+  // Local fallback intake shape created by /shopproof/new.
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_email?: string | null;
+  customer_address?: string | null;
+
   customer?: CustomerRow | CustomerRow[] | null;
   customers?: CustomerRow | CustomerRow[] | null;
   vehicle?: VehicleRow | VehicleRow[] | null;
@@ -150,7 +160,23 @@ function pickVehicle(job: JobRow): VehicleRow | null {
 function pickCustomer(job: JobRow): CustomerRow | null {
   const primary = Array.isArray(job.customer) ? job.customer[0] ?? null : job.customer ?? null;
   const fallback = Array.isArray(job.customers) ? job.customers[0] ?? null : job.customers ?? null;
-  return primary || fallback || null;
+
+  if (primary || fallback) return primary || fallback;
+
+  const vehicle = pickVehicle(job);
+
+  const localName = `${job.customer_name ?? vehicle?.customer_name ?? ""}`.trim();
+  const localPhone = `${job.customer_phone ?? vehicle?.customer_phone ?? ""}`.trim();
+
+  if (localName || localPhone) {
+    return {
+      id: job.customer_id ?? null,
+      name: localName || null,
+      phone: localPhone || null,
+    };
+  }
+
+  return null;
 }
 
 function formatVehicleLabel(vehicle: VehicleRow | null) {
@@ -309,7 +335,7 @@ export default function ShopProofDashboardPage() {
 
       setJobs((data as JobRow[]) || []);
     } catch (err: any) {
-      console.error("Dashboard load error:", err);
+      console.warn("Dashboard Supabase unavailable; using local fallback.", err);
 
       try {
         const localRaw = window.localStorage.getItem("shopproof_jobs");
@@ -317,7 +343,7 @@ export default function ShopProofDashboardPage() {
 
         if (Array.isArray(parsed) && parsed.length > 0) {
           setJobs(parsed);
-          setError("Loaded local backup data.");
+          setError("Supabase unavailable. Showing local fallback data.");
         } else {
           setJobs([]);
           setError(err?.message || "Unable to load ShopPROOF jobs.");
@@ -1494,7 +1520,7 @@ const ghostButton: CSSProperties = {
   border: THEME.borderSoft,
   background:
     "linear-gradient(180deg, rgba(18,31,47,0.92) 0%, rgba(11,21,33,0.94) 100%)",
-  color: THEME.text,
+  color: THEME.textOnDark,
   padding: "0 16px",
   fontSize: "0.94rem",
   fontWeight: 800,
