@@ -308,10 +308,15 @@ export default function ShopProofDashboardPage() {
       const client = getSupabaseClient();
 
       if (!client) {
-        const localRaw = window.localStorage.getItem("shopproof_jobs");
-        const parsed = localRaw ? JSON.parse(localRaw) : [];
-        setJobs(Array.isArray(parsed) ? parsed : []);
-        setError("Supabase is not configured. Showing local fallback data.");
+        if (process.env.NODE_ENV === "development") {
+          const localRaw = window.localStorage.getItem("shopproof_jobs");
+          const parsed = localRaw ? JSON.parse(localRaw) : [];
+          setJobs(Array.isArray(parsed) ? parsed : []);
+          setError("Supabase is not configured. Showing local fallback data.");
+        } else {
+          setJobs([]);
+          setError("Supabase is not configured. Check production environment variables.");
+        }
         return;
       }
 
@@ -360,22 +365,27 @@ export default function ShopProofDashboardPage() {
 
       setJobs((data as JobRow[]) || []);
     } catch (err: any) {
-      console.warn("Dashboard Supabase unavailable; using local fallback.", err);
+      console.warn("Dashboard Supabase unavailable.", err);
 
-      try {
-        const localRaw = window.localStorage.getItem("shopproof_jobs");
-        const parsed = localRaw ? JSON.parse(localRaw) : [];
+      if (process.env.NODE_ENV === "development") {
+        try {
+          const localRaw = window.localStorage.getItem("shopproof_jobs");
+          const parsed = localRaw ? JSON.parse(localRaw) : [];
 
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setJobs(parsed);
-          setError("Supabase unavailable. Showing local fallback data.");
-        } else {
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setJobs(parsed);
+            setError("Supabase unavailable. Showing local fallback data.");
+          } else {
+            setJobs([]);
+            setError(err?.message || "Unable to load ShopPROOF jobs.");
+          }
+        } catch {
           setJobs([]);
           setError(err?.message || "Unable to load ShopPROOF jobs.");
         }
-      } catch {
+      } else {
         setJobs([]);
-        setError(err?.message || "Unable to load ShopPROOF jobs.");
+        setError(err?.message || "Unable to load ShopPROOF jobs from Supabase.");
       }
     } finally {
       setLoading(false);

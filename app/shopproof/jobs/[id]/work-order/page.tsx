@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,6 +8,7 @@ import {
   CheckCircle2,
   Circle,
   Printer,
+  Save,
   Shield,
   Wrench,
 } from "lucide-react";
@@ -17,12 +19,48 @@ type ApprovalStatus =
   | "signed_in_person"
   | "signed_remote";
 
+type WorkOrderDraft = {
+  id: string;
+  createdAt: string;
+  status: string;
+  customer: {
+    name: string;
+    phone: string;
+    email: string;
+    address: string;
+  };
+  vehicle: {
+    year: string;
+    make: string;
+    model: string;
+    vin: string;
+    mileageIn: string;
+    plate: string;
+    color: string;
+  };
+  visit: {
+    concern: string;
+    requestedWork: string;
+    additionalNotes: string;
+    writtenBy: string;
+  };
+  authorization: {
+    diagnosticsFee: string;
+    authorizationStatus: ApprovalStatus;
+    signatureName: string;
+    signatureMethod: string;
+    signatureTimestamp: string;
+  };
+};
+
 export default function WorkOrderPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
 
   const [job, setJob] = useState<any>(null);
+  const [draft, setDraft] = useState<WorkOrderDraft | null>(null);
+  const [saveStatus, setSaveStatus] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -30,7 +68,7 @@ export default function WorkOrderPage() {
     setJob(found || null);
   }, [id]);
 
-  const normalized = useMemo(() => {
+  const normalized = useMemo<WorkOrderDraft | null>(() => {
     if (!job) return null;
 
     const customer = job.customer || {};
@@ -43,37 +81,46 @@ export default function WorkOrderPage() {
 
     return {
       id: job.id || "",
-      createdAt: job.createdAt || "",
+      createdAt: job.createdAt || job.created_at || "",
       status: job.status || "New",
       customer: {
-        name: customer.name || "",
-        phone: customer.phone || "",
-        email: customer.email || "",
-        address: customer.address || "",
+        name: customer.name || job.customerName || job.customer_name || "",
+        phone: customer.phone || job.customerPhone || job.customer_phone || "",
+        email: customer.email || job.customerEmail || job.customer_email || "",
+        address: customer.address || job.customerAddress || job.customer_address || "",
       },
       vehicle: {
-        year: vehicle.year || "",
-        make: vehicle.make || "",
-        model: vehicle.model || "",
-        vin: vehicle.vin || "",
-        mileageIn: vehicle.mileageIn || "",
-        plate: vehicle.plate || "",
-        color: vehicle.color || "",
+        year: String(vehicle.year || job.year || ""),
+        make: vehicle.make || job.make || "",
+        model: vehicle.model || job.model || "",
+        vin: vehicle.vin || job.vin || "",
+        mileageIn: String(vehicle.mileageIn || vehicle.mileage_in || job.mileageIn || job.mileage_in || ""),
+        plate: vehicle.plate || job.plate || "",
+        color: vehicle.color || job.color || "",
       },
       visit: {
-        concern: visit.concern || "",
+        concern: visit.concern || job.concern || "",
+        requestedWork: visit.requestedWork || visit.requested_work || job.requestedWork || job.requested_work || "",
+        additionalNotes: visit.additionalNotes || visit.additional_notes || job.additionalNotes || job.additional_notes || job.notes || "",
+        writtenBy: visit.writtenBy || visit.written_by || job.writtenBy || job.written_by || "",
       },
       authorization: {
-        diagnosticsFee: authorization.diagnosticsFee || "",
+        diagnosticsFee: String(authorization.diagnosticsFee || authorization.diagnostics_fee || job.diagnosticsFee || job.diagnostics_fee || ""),
         authorizationStatus: approvalStatus,
-        signatureName: authorization.signatureName || "",
-        signatureMethod: authorization.signatureMethod || "",
-        signatureTimestamp: authorization.signatureTimestamp || "",
+        signatureName: authorization.signatureName || authorization.signature_name || "",
+        signatureMethod: authorization.signatureMethod || authorization.signature_method || "",
+        signatureTimestamp: authorization.signatureTimestamp || authorization.signature_timestamp || "",
       },
     };
   }, [job]);
 
-  if (!normalized) {
+  useEffect(() => {
+    if (!normalized) return;
+    setDraft(normalized);
+    setSaveStatus("");
+  }, [normalized]);
+
+  if (!normalized || !draft) {
     return (
       <main style={pageStyle}>
         <div style={screenBarStyle} className="no-print">
@@ -102,20 +149,109 @@ export default function WorkOrderPage() {
   }
 
   const vehicleLine =
-    [normalized.vehicle.year, normalized.vehicle.make, normalized.vehicle.model]
+    [draft.vehicle.year, draft.vehicle.make, draft.vehicle.model]
       .filter(Boolean)
       .join(" ") || "-";
 
   const printDate =
-    formatDate(normalized.createdAt) || formatDate(new Date().toISOString());
+    formatDate(draft.createdAt) || formatDate(new Date().toISOString());
 
   const authLabel = formatApprovalLabel(
-    normalized.authorization.authorizationStatus
+    draft.authorization.authorizationStatus
   );
 
   const signedAlready =
-    normalized.authorization.authorizationStatus === "signed_in_person" ||
-    normalized.authorization.authorizationStatus === "signed_remote";
+    draft.authorization.authorizationStatus === "signed_in_person" ||
+    draft.authorization.authorizationStatus === "signed_remote";
+
+  const updateDraftSection = <Section extends keyof WorkOrderDraft>(
+    section: Section,
+    field: keyof WorkOrderDraft[Section],
+    value: string
+  ) => {
+    if (signedAlready) return;
+
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        [section]: {
+          ...(current[section] as any),
+          [field]: value,
+        },
+      };
+    });
+
+    setSaveStatus("Unsaved changes");
+  };
+
+  const handleSave = () => {
+    if (signedAlready || !draft) return;
+
+    const updatedJob = {
+      ...job,
+      customer: {
+        ...(job?.customer || {}),
+        name: draft.customer.name,
+        phone: draft.customer.phone,
+        email: draft.customer.email,
+        address: draft.customer.address,
+      },
+      vehicle: {
+        ...(job?.vehicle || {}),
+        year: draft.vehicle.year,
+        make: draft.vehicle.make,
+        model: draft.vehicle.model,
+        vin: draft.vehicle.vin,
+        mileageIn: draft.vehicle.mileageIn,
+        plate: draft.vehicle.plate,
+        color: draft.vehicle.color,
+      },
+      visit: {
+        ...(job?.visit || {}),
+        concern: draft.visit.concern,
+        requestedWork: draft.visit.requestedWork,
+        additionalNotes: draft.visit.additionalNotes,
+        writtenBy: draft.visit.writtenBy,
+      },
+      authorization: {
+        ...(job?.authorization || {}),
+        diagnosticsFee: draft.authorization.diagnosticsFee,
+        authorizationStatus: draft.authorization.authorizationStatus,
+        signatureName: draft.authorization.signatureName,
+        signatureMethod: draft.authorization.signatureMethod,
+        signatureTimestamp: draft.authorization.signatureTimestamp,
+      },
+      customerName: draft.customer.name,
+      customerPhone: draft.customer.phone,
+      customerEmail: draft.customer.email,
+      customerAddress: draft.customer.address,
+      concern: draft.visit.concern,
+      requestedWork: draft.visit.requestedWork,
+      additionalNotes: draft.visit.additionalNotes,
+      notes: draft.visit.additionalNotes,
+      writtenBy: draft.visit.writtenBy,
+      diagnosticsFee: draft.authorization.diagnosticsFee,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      const raw = window.localStorage.getItem("shopproof_jobs");
+      const jobs = raw ? JSON.parse(raw) : [];
+      const list = Array.isArray(jobs) ? jobs : [];
+      const exists = list.some((item: any) => item?.id === id);
+      const updatedJobs = exists
+        ? list.map((item: any) => (item?.id === id ? updatedJob : item))
+        : [updatedJob, ...list];
+
+      window.localStorage.setItem("shopproof_jobs", JSON.stringify(updatedJobs));
+      setJob(updatedJob);
+      setSaveStatus("Saved");
+    } catch (error) {
+      console.error("Work order save error:", error);
+      setSaveStatus("Save failed");
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -129,10 +265,21 @@ export default function WorkOrderPage() {
           Back
         </button>
 
-        <button type="button" onClick={handlePrint} style={primaryButtonStyle}>
-          <Printer size={16} />
-          Print
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {saveStatus ? <div style={saveStatusStyle}>{saveStatus}</div> : null}
+
+          {!signedAlready ? (
+            <button type="button" onClick={handleSave} style={secondaryButtonStyle}>
+              <Save size={16} />
+              Save Edits
+            </button>
+          ) : null}
+
+          <button type="button" onClick={handlePrint} style={primaryButtonStyle}>
+            <Printer size={16} />
+            Print
+          </button>
+        </div>
       </div>
 
       <div style={pageInnerStyle}>
@@ -152,10 +299,22 @@ export default function WorkOrderPage() {
               <div style={headerBadgeStyle}>Customer authorization</div>
             </div>
 
+            {signedAlready ? (
+              <div style={lockedNoticeStyle} className="no-print">
+                <CheckCircle2 size={17} />
+                Signed authorization is already recorded. Intake details are locked.
+              </div>
+            ) : (
+              <div style={editableNoticeStyle} className="no-print">
+                <Shield size={17} />
+                Intake details remain editable until customer authorization is captured.
+              </div>
+            )}
+
             <div style={metaGridStyle}>
               <MetaCard label="Record Date" value={printDate} />
-              <MetaCard label="Job ID" value={normalized.id || "-"} />
-              <MetaCard label="Status" value={normalized.status || "-"} />
+              <MetaCard label="Job ID" value={draft.id || "-"} />
+              <MetaCard label="Status" value={draft.status || "-"} />
               <MetaCard label="Authorization" value={authLabel} />
             </div>
 
@@ -164,10 +323,30 @@ export default function WorkOrderPage() {
                 title="Customer Information"
                 icon={<Shield size={15} />}
               >
-                <DataRow label="Name" value={normalized.customer.name || "-"} />
-                <DataRow label="Phone" value={normalized.customer.phone || "-"} />
-                <DataRow label="Email" value={normalized.customer.email || "-"} />
-                <DataRow label="Address" value={normalized.customer.address || "-"} />
+                <EditableDataRow
+                  label="Name"
+                  value={draft.customer.name}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("customer", "name", value)}
+                />
+                <EditableDataRow
+                  label="Phone"
+                  value={draft.customer.phone}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("customer", "phone", value)}
+                />
+                <EditableDataRow
+                  label="Email"
+                  value={draft.customer.email}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("customer", "email", value)}
+                />
+                <EditableDataRow
+                  label="Address"
+                  value={draft.customer.address}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("customer", "address", value)}
+                />
               </SectionCard>
 
               <SectionCard
@@ -175,28 +354,69 @@ export default function WorkOrderPage() {
                 icon={<Wrench size={15} />}
               >
                 <DataRow label="Vehicle" value={vehicleLine} />
-                <DataRow label="VIN" value={normalized.vehicle.vin || "-"} />
-                <DataRow label="Mileage In" value={normalized.vehicle.mileageIn || "-"} />
-                <DataRow label="Plate" value={normalized.vehicle.plate || "-"} />
-                <DataRow label="Color" value={normalized.vehicle.color || "-"} />
+                <EditableDataRow
+                  label="VIN"
+                  value={draft.vehicle.vin}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("vehicle", "vin", value)}
+                />
+                <EditableDataRow
+                  label="Mileage In"
+                  value={draft.vehicle.mileageIn}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("vehicle", "mileageIn", value)}
+                />
+                <EditableDataRow
+                  label="Plate"
+                  value={draft.vehicle.plate}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("vehicle", "plate", value)}
+                />
+                <EditableDataRow
+                  label="Color"
+                  value={draft.vehicle.color}
+                  disabled={signedAlready}
+                  onChange={(value) => updateDraftSection("vehicle", "color", value)}
+                />
               </SectionCard>
             </div>
 
             <SectionCard title="Customer Concern / Requested Inspection">
-              <ParagraphPanel>
-                {normalized.visit.concern || "No concern entered."}
-              </ParagraphPanel>
+              <EditableTextarea
+                value={draft.visit.concern}
+                disabled={signedAlready}
+                placeholder="Enter the customer's primary concern or requested inspection."
+                onChange={(value) => updateDraftSection("visit", "concern", value)}
+              />
+            </SectionCard>
+
+            <SectionCard title="Requested Work / Intake Snapshot">
+              <EditableTextarea
+                value={draft.visit.requestedWork}
+                disabled={signedAlready}
+                placeholder="Add requested work, intake context, or details gathered after the original check-in."
+                onChange={(value) => updateDraftSection("visit", "requestedWork", value)}
+              />
+            </SectionCard>
+
+            <SectionCard title="Additional Internal Notes">
+              <EditableTextarea
+                value={draft.visit.additionalNotes}
+                disabled={signedAlready}
+                placeholder="Add internal notes before authorization is captured. These stay with the work order record."
+                onChange={(value) => updateDraftSection("visit", "additionalNotes", value)}
+              />
             </SectionCard>
 
             <SectionCard title="Diagnostics Authorization">
               <div style={feeGridStyle} className="print-grid-fee">
                 <div style={feeCardStyle}>
                   <div style={feeLabelStyle}>Diagnostics Fee</div>
-                  <div style={feeValueStyle}>
-                    {normalized.authorization.diagnosticsFee
-                      ? `$${normalized.authorization.diagnosticsFee}`
-                      : "$-"}
-                  </div>
+                  <EditableFeeInput
+                    value={draft.authorization.diagnosticsFee}
+                    disabled={signedAlready}
+                    onChange={(value) => updateDraftSection("authorization", "diagnosticsFee", value)}
+                  />
                 </div>
 
                 <div style={legalPanelStyle}>
@@ -220,32 +440,42 @@ export default function WorkOrderPage() {
               <div style={grid2Style} className="print-grid-2">
                 <div style={statusPanelStyle}>
                   <StatusLine
-                    checked={normalized.authorization.authorizationStatus === "pending"}
+                    checked={draft.authorization.authorizationStatus === "pending"}
                     label="Pending approval"
                   />
                   <StatusLine
-                    checked={normalized.authorization.authorizationStatus === "signed_in_person"}
+                    checked={draft.authorization.authorizationStatus === "signed_in_person"}
                     label="Signed in person"
                   />
                   <StatusLine
-                    checked={normalized.authorization.authorizationStatus === "signed_remote"}
+                    checked={draft.authorization.authorizationStatus === "signed_remote"}
                     label="Signed remotely"
                   />
                 </div>
 
                 <div style={signatureMetaPanelStyle}>
+                  <div style={metaLabelStyle}>Written By</div>
+                  <EditableDataRow
+                    label="Staff"
+                    value={draft.visit.writtenBy}
+                    disabled={signedAlready}
+                    onChange={(value) => updateDraftSection("visit", "writtenBy", value)}
+                  />
+
+                  <div style={{ height: 12 }} />
+
                   <div style={metaLabelStyle}>Signed By</div>
                   <div style={metaValueStyle}>
-                    {normalized.authorization.signatureName || "-"}
+                    {draft.authorization.signatureName || "-"}
                   </div>
 
                   <div style={{ height: 12 }} />
 
                   <div style={metaLabelStyle}>Method / Timestamp</div>
                   <div style={metaValueStyle}>
-                    {normalized.authorization.signatureMethod || "-"}
-                    {normalized.authorization.signatureTimestamp
-                      ? ` • ${formatDateTime(normalized.authorization.signatureTimestamp)}`
+                    {draft.authorization.signatureMethod || "-"}
+                    {draft.authorization.signatureTimestamp
+                      ? ` • ${formatDateTime(draft.authorization.signatureTimestamp)}`
                       : ""}
                   </div>
                 </div>
@@ -278,17 +508,17 @@ export default function WorkOrderPage() {
                   <div style={grid3Style} className="print-grid-3">
                     <SignatureField
                       label="Signed By"
-                      value={normalized.authorization.signatureName || "-"}
+                      value={draft.authorization.signatureName || "-"}
                     />
                     <SignatureField
                       label="Method"
-                      value={normalized.authorization.signatureMethod || "-"}
+                      value={draft.authorization.signatureMethod || "-"}
                     />
                     <SignatureField
                       label="Date / Time"
                       value={
-                        normalized.authorization.signatureTimestamp
-                          ? formatDateTime(normalized.authorization.signatureTimestamp)
+                        draft.authorization.signatureTimestamp
+                          ? formatDateTime(draft.authorization.signatureTimestamp)
                           : "-"
                       }
                     />
@@ -321,6 +551,19 @@ export default function WorkOrderPage() {
         @media print {
           .no-print {
             display: none !important;
+          }
+
+          input,
+          textarea {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
+
+          textarea {
+            resize: none !important;
           }
 
           html,
@@ -446,6 +689,75 @@ function SignatureField({
     <div style={signatureFieldStyle}>
       <div style={metaLabelStyle}>{label}</div>
       <div style={metaValueStyle}>{value}</div>
+    </div>
+  );
+}
+
+
+function EditableDataRow({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div style={dataRowStyle}>
+      <div style={dataRowLabelStyle}>{label}</div>
+      <input
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        style={disabled ? editorInputLockedStyle : editorInputStyle}
+      />
+    </div>
+  );
+}
+
+function EditableTextarea({
+  value,
+  disabled,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <textarea
+      value={value}
+      disabled={disabled}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+      style={disabled ? editorTextareaLockedStyle : editorTextareaStyle}
+    />
+  );
+}
+
+function EditableFeeInput({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span style={feeDollarStyle}>$</span>
+      <input
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        style={disabled ? feeInputLockedStyle : feeInputStyle}
+      />
     </div>
   );
 }
@@ -862,4 +1174,115 @@ const secondaryButtonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: 8,
+};
+
+const saveStatusStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 38,
+  padding: "0 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(71,85,105,0.14)",
+  background: "rgba(255,255,255,0.76)",
+  color: "#334155",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const lockedNoticeStyle: React.CSSProperties = {
+  marginBottom: 18,
+  border: "1px solid rgba(5,150,105,0.16)",
+  borderRadius: 16,
+  background: "linear-gradient(180deg, rgba(236,253,245,0.92) 0%, rgba(248,250,252,0.98) 100%)",
+  color: "#065f46",
+  padding: 14,
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const editableNoticeStyle: React.CSSProperties = {
+  marginBottom: 18,
+  border: "1px solid rgba(37,99,235,0.16)",
+  borderRadius: 16,
+  background: "linear-gradient(180deg, rgba(239,246,255,0.92) 0%, rgba(248,250,252,0.98) 100%)",
+  color: "#1d4ed8",
+  padding: 14,
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  fontSize: 13,
+  fontWeight: 800,
+};
+
+const editorInputStyle: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid rgba(37,99,235,0.18)",
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.94)",
+  color: "#0f172a",
+  padding: "8px 10px",
+  fontSize: 13,
+  fontWeight: 700,
+  outline: "none",
+};
+
+const editorInputLockedStyle: React.CSSProperties = {
+  ...editorInputStyle,
+  border: "1px solid rgba(71,85,105,0.10)",
+  background: "rgba(248,250,252,0.98)",
+  color: "#334155",
+};
+
+const editorTextareaStyle: React.CSSProperties = {
+  minHeight: 104,
+  width: "100%",
+  border: "1px solid rgba(37,99,235,0.18)",
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.94)",
+  color: "#0f172a",
+  padding: 14,
+  fontSize: 13,
+  lineHeight: 1.7,
+  resize: "vertical",
+  outline: "none",
+  fontFamily: "inherit",
+};
+
+const editorTextareaLockedStyle: React.CSSProperties = {
+  ...editorTextareaStyle,
+  border: "1px solid rgba(71,85,105,0.10)",
+  background: "rgba(248,250,252,0.98)",
+  color: "#334155",
+  resize: "none",
+};
+
+const feeDollarStyle: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 800,
+  lineHeight: 1,
+  color: "#0f172a",
+};
+
+const feeInputStyle: React.CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  border: "1px solid rgba(37,99,235,0.18)",
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.94)",
+  color: "#0f172a",
+  padding: "8px 10px",
+  fontSize: 22,
+  fontWeight: 800,
+  lineHeight: 1,
+  outline: "none",
+};
+
+const feeInputLockedStyle: React.CSSProperties = {
+  ...feeInputStyle,
+  border: "1px solid rgba(71,85,105,0.10)",
+  background: "rgba(248,250,252,0.98)",
+  color: "#0f172a",
 };
