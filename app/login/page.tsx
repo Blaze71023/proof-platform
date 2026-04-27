@@ -13,10 +13,21 @@ export default function LoginPage() {
 
     const supabase = getSupabaseClient();
 
+    if (!supabase) {
+      setLoading(false);
+      alert("Supabase is not configured. Check environment variables.");
+      return;
+    }
+
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/shopproof/dashboard`
+        : "http://localhost:3000/shopproof/dashboard";
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: "http://localhost:3000/shopproof/dashboard",
+        emailRedirectTo: redirectTo,
       },
     });
 
@@ -57,7 +68,7 @@ export default function LoginPage() {
   );
 }
 
-const styles: any = {
+const styles: Record<string, React.CSSProperties> = {
   container: {
     minHeight: "100vh",
     display: "flex",
