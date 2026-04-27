@@ -63,15 +63,15 @@ export default function ShopProofWorkPage() {
 
       setRawJob(found || null);
 
-      if (found?.work) {
+      if ((found as any)?.work) {
         setWork({
-          technician: found.work.technician || "",
-          findings: found.work.findings || "",
-          workPerformed: found.work.workPerformed || "",
-          recommendedRepairs: found.work.recommendedRepairs || "",
-          internalNotes: found.work.internalNotes || "",
-          photos: found.work.photos || {},
-          updatedAt: found.work.updatedAt,
+          technician: (found as any).work.technician || "",
+          findings: (found as any).work.findings || "",
+          workPerformed: (found as any).work.workPerformed || "",
+          recommendedRepairs: (found as any).work.recommendedRepairs || "",
+          internalNotes: (found as any).work.internalNotes || "",
+          photos: (found as any).work.photos || {},
+          updatedAt: (found as any).work.updatedAt,
         });
       } else {
         setWork((prev) => ({
