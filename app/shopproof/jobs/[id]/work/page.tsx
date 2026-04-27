@@ -152,7 +152,7 @@ export default function ShopProofWorkPage() {
   if (!job?.id) {
     return (
       <CenteredMessage
-        title="Job not found"
+        title="Aww, Snap! Job not found"
         detail="Return to the dashboard and open the job from the active list."
         actionLabel="Back to Dashboard"
         onAction={() => router.push("/shopproof/dashboard")}
