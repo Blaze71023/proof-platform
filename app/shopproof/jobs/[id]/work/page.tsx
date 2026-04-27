@@ -76,7 +76,7 @@ export default function ShopProofWorkPage() {
       } else {
         setWork((prev) => ({
           ...prev,
-          technician: found?.writtenBy || found?.written_by || "",
+          technician: (found as any)?.writtenBy || (found as any)?.written_by || "",
         }));
       }
     } catch (err) {
