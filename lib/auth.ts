@@ -1,11 +1,18 @@
 "use client";
 
-import { supabase } from "./supabase";
+import { getSupabaseClient } from "./supabase";
 
 export async function getUser() {
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    return null;
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   return user;
 }
 
