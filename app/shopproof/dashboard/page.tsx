@@ -50,6 +50,7 @@ type VehicleRow = {
 type JobRow = {
   id: string;
   shop_id?: string | null;
+  user_id?: string | null;
   customer_id?: string | null;
   vehicle_id?: string | null;
   status?: string | null;
@@ -86,6 +87,14 @@ type DashboardJobCard = {
   updatedAt: string | null;
   assignedTo: string;
 };
+
+type AuthState = {
+  userId: string | null;
+  email: string | null;
+  isOwner: boolean;
+};
+
+const OWNER_EMAIL = (process.env.NEXT_PUBLIC_OWNER_EMAIL || "termssupport@gmail.com").toLowerCase();
 
 const THEME = {
   pageBase:
@@ -271,6 +280,12 @@ export default function ShopProofDashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
+  const [auth, setAuth] = useState<AuthState>({
+    userId: null,
+    email: null,
+    isOwner: false,
+  });
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
@@ -281,7 +296,9 @@ export default function ShopProofDashboardPage() {
 
   const isMobile = width < 820;
 
-  const loadJobs = async (isRefresh = false) => {
+  const loadJobs = async (isRefresh = false, userIdOverride?: string | null) => {
+    const activeUserId = userIdOverride ?? auth.userId;
+
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
@@ -294,6 +311,12 @@ export default function ShopProofDashboardPage() {
         const localRaw = window.localStorage.getItem("shopproof_jobs");
         const parsed = localRaw ? JSON.parse(localRaw) : [];
         setJobs(Array.isArray(parsed) ? parsed : []);
+        setError("Supabase is not configured. Showing local fallback data.");
+        return;
+      }
+
+      if (!activeUserId) {
+        router.push("/login");
         return;
       }
 
@@ -302,6 +325,7 @@ export default function ShopProofDashboardPage() {
         .select(`
           id,
           shop_id,
+          user_id,
           customer_id,
           vehicle_id,
           status,
@@ -329,6 +353,7 @@ export default function ShopProofDashboardPage() {
             created_at
           )
         `)
+        .eq("user_id", activeUserId)
         .order("created_at", { ascending: false });
 
       if (queryError) throw queryError;
@@ -359,7 +384,68 @@ export default function ShopProofDashboardPage() {
   };
 
   useEffect(() => {
-    loadJobs();
+    let mounted = true;
+
+    async function checkAuthAndLoadJobs() {
+      setAuthLoading(true);
+
+      try {
+        const client = getSupabaseClient();
+
+        if (!client) {
+          if (!mounted) return;
+
+          setAuth({
+            userId: null,
+            email: null,
+            isOwner: false,
+          });
+          setAuthLoading(false);
+          await loadJobs(false, null);
+          return;
+        }
+
+        const {
+          data: { user },
+          error: authError,
+        } = await client.auth.getUser();
+
+        if (authError) throw authError;
+
+        if (!user) {
+          router.push("/login");
+          return;
+        }
+
+        const email = user.email ?? null;
+        const nextAuth = {
+          userId: user.id,
+          email,
+          isOwner: (email || "").toLowerCase() === OWNER_EMAIL,
+        };
+
+        if (!mounted) return;
+
+        setAuth(nextAuth);
+        setAuthLoading(false);
+        await loadJobs(false, user.id);
+      } catch (err: any) {
+        console.warn("Dashboard auth check failed.", err);
+
+        if (!mounted) return;
+
+        setAuthLoading(false);
+        setLoading(false);
+        setError(err?.message || "Unable to verify ShopPROOF login.");
+        router.push("/login");
+      }
+    }
+
+    checkAuthAndLoadJobs();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const normalizedJobs = useMemo<DashboardJobCard[]>(() => {
@@ -422,6 +508,55 @@ export default function ShopProofDashboardPage() {
   const totalVisible = filteredJobs.length;
   const needsAttentionCount = intakeNeeded.length;
   const hasAnyJobs = normalizedJobs.length > 0;
+
+  if (authLoading) {
+    return (
+      <main
+        style={{
+          minHeight: "100vh",
+          backgroundImage: THEME.pageBase,
+          color: THEME.text,
+          display: "grid",
+          placeItems: "center",
+          padding: 20,
+        }}
+      >
+        <div
+          style={{
+            minHeight: 96,
+            borderRadius: 20,
+            background: THEME.card,
+            border: THEME.borderSoft,
+            boxShadow: THEME.cardShadow,
+            padding: "20px 22px",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 10,
+            fontWeight: 900,
+            color: THEME.textSoft,
+          }}
+        >
+          <LoaderCircle size={17} className="spin" />
+          Verifying ShopPROOF access...
+        </div>
+
+        <style jsx>{`
+          .spin {
+            animation: spin 1s linear infinite;
+          }
+
+          @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -540,9 +675,10 @@ export default function ShopProofDashboardPage() {
               color: THEME.textDim,
               letterSpacing: "0.03em",
               textTransform: "uppercase",
+              textAlign: "right",
             }}
           >
-            Internal App
+            {auth.isOwner ? "Owner Access" : "ShopPROOF Access"}
           </div>
         </div>
 
@@ -568,7 +704,7 @@ export default function ShopProofDashboardPage() {
             <button
               type="button"
               style={{ ...ghostButton, width: isMobile ? "100%" : undefined }}
-              onClick={() => loadJobs(true)}
+              onClick={() => loadJobs(true, auth.userId)}
               disabled={refreshing}
             >
               {refreshing ? <LoaderCircle size={15} className="spin" /> : <Clock3 size={15} />}

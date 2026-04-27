@@ -111,8 +111,9 @@ export default function JobDetailPage() {
   }
 
   const vehicleTitle =
-    [job.vehicleYear, job.vehicleMake, job.vehicleModel].filter(Boolean).join(" ") ||
-    "Vehicle Record";
+    [job.vehicleYear, job.vehicleMake, job.vehicleModel]
+      .filter(Boolean)
+      .join(" ") || "Vehicle Record";
 
   const customerDisplay = job.customerName || "Unknown Customer";
   const phoneDisplay = job.customerPhone || "No Phone";
@@ -138,21 +139,29 @@ export default function JobDetailPage() {
           </div>
 
           <div style={headerMetaStyle}>
-            <div style={statusPillStyle(job.status)}>{job.status || "New Intake"}</div>
+            <div style={statusPillStyle(job.status)}>
+              {job.status || "New Intake"}
+            </div>
             <div style={smallMetaStyle}>ID: {job.id}</div>
           </div>
         </header>
 
         <section style={statusBarStyle}>
           <StatusBlock label="Record stage" value={job.status || "New Intake"} />
-          <StatusBlock label="Approval state" value={job.approvalState || "Not Requested"} />
+          <StatusBlock
+            label="Approval state"
+            value={job.approvalState || "Not Requested"}
+          />
           <StatusBlock label="Created" value={formatDate(job.createdAt)} />
           <StatusBlock label="Updated" value={formatDate(job.updatedAt)} />
         </section>
 
         <div style={bodyGridStyle}>
           <main style={mainColumnStyle}>
-            <Panel title="Vehicle Details" subtitle="Identity anchor for the job record.">
+            <Panel
+              title="Vehicle Details"
+              subtitle="Identity anchor for the job record."
+            >
               <InfoGrid>
                 <InfoItem label="Year" value={job.vehicleYear} />
                 <InfoItem label="Make" value={job.vehicleMake} />
@@ -164,7 +173,10 @@ export default function JobDetailPage() {
               </InfoGrid>
             </Panel>
 
-            <Panel title="Customer Information" subtitle="Who the record is tied to.">
+            <Panel
+              title="Customer Information"
+              subtitle="Who the record is tied to."
+            >
               <InfoGrid>
                 <InfoItem label="Name" value={job.customerName} />
                 <InfoItem label="Phone" value={job.customerPhone} />
@@ -180,30 +192,53 @@ export default function JobDetailPage() {
               <div style={{ display: "grid", gap: 14 }}>
                 <TextBlock label="Primary Concern" value={job.concern} />
                 <TextBlock label="Requested Work" value={job.requestedWork} />
-                <TextBlock label="Internal Notes / Intake Snapshot" value={job.notes} preserve />
+                <TextBlock
+                  label="Internal Notes / Intake Snapshot"
+                  value={job.notes}
+                  preserve
+                />
                 <TextBlock label="Findings" value={job.findings} preserve />
               </div>
             </Panel>
           </main>
 
           <aside style={sideColumnStyle}>
-            <Panel title="Workflow Actions" subtitle="Keep the record moving without changing intake.">
+            <Panel
+              title="Workflow Actions"
+              subtitle="Keep the record moving without changing intake."
+            >
               <div style={{ display: "grid", gap: 12 }}>
                 <button
                   type="button"
-                  onClick={() => router.push(`/shopproof/jobs/${job.id}/final`)}
+                  onClick={() => router.push(`/shopproof/jobs/${job.id}/work`)}
                   style={primaryButtonStyle}
+                >
+                  Open Technician Work →
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => router.push(`/shopproof/jobs/${job.id}/final`)}
+                  style={outlineButtonStyle}
                 >
                   Proceed to Final Release →
                 </button>
 
-                <button type="button" onClick={() => window.print()} style={outlineButtonStyle}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`/shopproof/jobs/${job.id}/work-order`)
+                  }
+                  style={outlineButtonStyle}
+                >
                   Print Work Order
                 </button>
 
                 <div style={helpBoxStyle}>
-                  Final Release reads this same normalized record shape so customer, vehicle,
-                  concern, mileage, fee, and writer details do not disappear.
+                  Work page captures technician notes and photo evidence. Final
+                  Release reads this same normalized record shape so customer,
+                  vehicle, concern, mileage, fee, and writer details do not
+                  disappear.
                 </div>
               </div>
             </Panel>
@@ -233,7 +268,9 @@ function normalizeJob(job: AnyJob): NormalizedJob {
   return {
     id: stringValue(job?.id),
     status: stringValue(job?.status || "New Intake"),
-    approvalState: stringValue(job?.approval_state || job?.approvalState || "Not Requested"),
+    approvalState: stringValue(
+      job?.approval_state || job?.approvalState || "Not Requested"
+    ),
     createdAt: stringValue(job?.created_at || job?.createdAt || "") || null,
     updatedAt: stringValue(job?.updated_at || job?.updatedAt || "") || null,
 
@@ -250,7 +287,11 @@ function normalizeJob(job: AnyJob): NormalizedJob {
       customer?.phone,
       vehicle?.customer_phone
     ),
-    customerEmail: firstNonEmpty(job?.customer_email, job?.customerEmail, customer?.email),
+    customerEmail: firstNonEmpty(
+      job?.customer_email,
+      job?.customerEmail,
+      customer?.email
+    ),
     customerAddress: firstNonEmpty(
       job?.customer_address,
       job?.customerAddress,
@@ -260,10 +301,29 @@ function normalizeJob(job: AnyJob): NormalizedJob {
 
     vehicleYear: firstNonEmpty(vehicle?.year, job?.vehicle_year, job?.vehicleYear),
     vehicleMake: firstNonEmpty(vehicle?.make, job?.vehicle_make, job?.vehicleMake),
-    vehicleModel: firstNonEmpty(vehicle?.model, job?.vehicle_model, job?.vehicleModel),
-    vehicleVin: firstNonEmpty(vehicle?.vin, job?.vin, job?.vehicle_vin, job?.vehicleVin),
-    vehiclePlate: firstNonEmpty(vehicle?.plate, job?.plate, job?.vehicle_plate, job?.vehiclePlate),
-    vehicleColor: firstNonEmpty(vehicle?.color, job?.color, job?.vehicle_color, job?.vehicleColor),
+    vehicleModel: firstNonEmpty(
+      vehicle?.model,
+      job?.vehicle_model,
+      job?.vehicleModel
+    ),
+    vehicleVin: firstNonEmpty(
+      vehicle?.vin,
+      job?.vin,
+      job?.vehicle_vin,
+      job?.vehicleVin
+    ),
+    vehiclePlate: firstNonEmpty(
+      vehicle?.plate,
+      job?.plate,
+      job?.vehicle_plate,
+      job?.vehiclePlate
+    ),
+    vehicleColor: firstNonEmpty(
+      vehicle?.color,
+      job?.color,
+      job?.vehicle_color,
+      job?.vehicleColor
+    ),
 
     mileageIn: firstNonEmpty(
       vehicle?.mileage_in,
@@ -287,7 +347,11 @@ function normalizeJob(job: AnyJob): NormalizedJob {
       job?.diagnosticFee,
       parseSnapshotValue(notes, "Diagnostic Fee")
     ),
-    writtenBy: firstNonEmpty(job?.written_by, job?.writtenBy, parseSnapshotValue(notes, "Written By")),
+    writtenBy: firstNonEmpty(
+      job?.written_by,
+      job?.writtenBy,
+      parseSnapshotValue(notes, "Written By")
+    ),
   };
 }
 
@@ -311,7 +375,13 @@ function Panel({
   );
 }
 
-function InfoGrid({ children, single }: { children: React.ReactNode; single?: boolean }) {
+function InfoGrid({
+  children,
+  single,
+}: {
+  children: React.ReactNode;
+  single?: boolean;
+}) {
   return (
     <div
       style={{
@@ -339,16 +409,31 @@ function InfoItem({
   return (
     <div style={{ ...infoBoxStyle, gridColumn: wide ? "1 / -1" : undefined }}>
       <div style={infoLabelStyle}>{label}</div>
-      <div style={mono ? infoValueMonoStyle : infoValueStyle}>{value || "—"}</div>
+      <div style={mono ? infoValueMonoStyle : infoValueStyle}>
+        {value || "—"}
+      </div>
     </div>
   );
 }
 
-function TextBlock({ label, value, preserve }: { label: string; value: string; preserve?: boolean }) {
+function TextBlock({
+  label,
+  value,
+  preserve,
+}: {
+  label: string;
+  value: string;
+  preserve?: boolean;
+}) {
   return (
     <div style={textBlockStyle}>
       <div style={infoLabelStyle}>{label}</div>
-      <div style={{ ...textBlockValueStyle, whiteSpace: preserve ? "pre-wrap" : "normal" }}>
+      <div
+        style={{
+          ...textBlockValueStyle,
+          whiteSpace: preserve ? "pre-wrap" : "normal",
+        }}
+      >
         {value || "—"}
       </div>
     </div>
@@ -381,7 +466,11 @@ function CenteredMessage({
         <div style={titleStyle}>{title}</div>
         {detail ? <div style={subtitleStyle}>{detail}</div> : null}
         {actionLabel && onAction ? (
-          <button type="button" onClick={onAction} style={{ ...primaryButtonStyle, marginTop: 16 }}>
+          <button
+            type="button"
+            onClick={onAction}
+            style={{ ...primaryButtonStyle, marginTop: 16 }}
+          >
             {actionLabel}
           </button>
         ) : null}
@@ -423,7 +512,8 @@ function formatDate(value: string | null) {
 
 function statusPillStyle(status: string): CSSProperties {
   const normalized = status.toLowerCase();
-  const isComplete = normalized.includes("complete") || normalized.includes("released");
+  const isComplete =
+    normalized.includes("complete") || normalized.includes("released");
   const isProgress = normalized.includes("progress");
 
   return {
@@ -431,10 +521,22 @@ function statusPillStyle(status: string): CSSProperties {
     padding: "7px 11px",
     fontSize: 12,
     fontWeight: 900,
-    color: isComplete ? THEME.emerald : isProgress ? THEME.blueStrong : THEME.amber,
-    background: isComplete ? THEME.emeraldSoft : isProgress ? THEME.blueSoft : THEME.amberSoft,
+    color: isComplete
+      ? THEME.emerald
+      : isProgress
+        ? THEME.blueStrong
+        : THEME.amber,
+    background: isComplete
+      ? THEME.emeraldSoft
+      : isProgress
+        ? THEME.blueSoft
+        : THEME.amberSoft,
     border: `1px solid ${
-      isComplete ? THEME.emeraldLine : isProgress ? THEME.blueLine : THEME.amberLine
+      isComplete
+        ? THEME.emeraldLine
+        : isProgress
+          ? THEME.blueLine
+          : THEME.amberLine
     }`,
     whiteSpace: "nowrap",
   };
