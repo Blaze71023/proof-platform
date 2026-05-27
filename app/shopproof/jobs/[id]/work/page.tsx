@@ -1,831 +1,1057 @@
 "use client";
 
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Camera, FileText, Save, Wrench } from "lucide-react";
-import { getJobs } from "@/lib/shopproof";
+import { ArrowLeft, Camera, CircleCheck as CheckCircle, FileText, LoaderCircle, Save, Trash2, Upload, Wrench } from "lucide-react";
+import { getSupabaseClient } from "@/lib/supabase";
 
-type AnyJob = any;
+type AnyJob = Record<string, any>;
 
-type WorkPhotos = {
-  [key: string]: boolean;
+type EvidenceItem = {
+  id?: string;
+  label: string;
+  category: string;
+  key: string;
+  publicUrl?: string;
+  capturedAt?: string;
 };
 
-type WorkData = {
-  technician: string;
-  findings: string;
-  workPerformed: string;
-  recommendedRepairs: string;
-  internalNotes: string;
-  photos: WorkPhotos;
-  updatedAt?: string;
+const PHOTO_LIST = [
+  { key: "front", label: "Front Exterior", category: "exterior" },
+  { key: "rear", label: "Rear Exterior", category: "exterior" },
+  { key: "driver_side", label: "Driver Side", category: "exterior" },
+  { key: "passenger_side", label: "Passenger Side", category: "exterior" },
+  { key: "lf_wheel", label: "LF Wheel", category: "wheels" },
+  { key: "rf_wheel", label: "RF Wheel", category: "wheels" },
+  { key: "lr_wheel", label: "LR Wheel", category: "wheels" },
+  { key: "rr_wheel", label: "RR Wheel", category: "wheels" },
+  { key: "seat_console", label: "Seat / Console", category: "interior" },
+  { key: "door_panel", label: "Driver Door Panel", category: "interior" },
+  { key: "dash_odometer", label: "Dash / Odometer", category: "interior" },
+  { key: "underhood", label: "Underhood", category: "underhood" },
+  { key: "damage_closeup", label: "Damage Close-Up", category: "damage" },
+  { key: "scan_tool", label: "Scan Tool Screen", category: "scan_tool" },
+  { key: "failed_part", label: "Failed Part", category: "damage" },
+  { key: "repair_progress", label: "Repair Progress", category: "general" },
+];
+
+const THEME = {
+  page: "linear-gradient(180deg, #dfe6ee 0%, #d7e0e9 18%, #ced8e3 44%, #cad4df 74%, #d1dbe5 100%)",
+  shell: "linear-gradient(180deg, rgba(225,233,241,0.96) 0%, rgba(216,226,237,0.985) 48%, rgba(209,220,231,0.995) 100%)",
+  panel: "linear-gradient(180deg, rgba(250,252,255,0.985) 0%, rgba(243,247,252,0.995) 54%, rgba(238,243,249,1) 100%)",
+  card: "linear-gradient(180deg, rgba(247,250,254,0.98) 0%, rgba(239,245,251,1) 100%)",
+  topbar: "linear-gradient(180deg, rgba(234,240,247,0.92) 0%, rgba(223,232,242,0.88) 100%)",
+  text: "#132031",
+  textSoft: "#223347",
+  textMuted: "#61758a",
+  textDim: "#8099b0",
+  line: "rgba(28,47,67,0.11)",
+  shellBorder: "1px solid rgba(69,94,118,0.20)",
+  panelBorder: "1px solid rgba(84,108,131,0.17)",
+  cardBorder: "1px solid rgba(92,116,140,0.14)",
+  shellShadow: "0 30px 80px rgba(27,39,54,0.16)",
+  panelShadow: "0 16px 34px rgba(28,42,59,0.09)",
+  cardShadow: "0 12px 24px rgba(27,40,56,0.06)",
+  blue: "#2563eb",
+  blueStrong: "#1d4ed8",
+  blueSoft: "rgba(37,99,235,0.10)",
+  blueLine: "rgba(37,99,235,0.28)",
+  emerald: "#059669",
+  emeraldSoft: "rgba(5,150,105,0.10)",
+  emeraldLine: "rgba(5,150,105,0.22)",
+  red: "#dc2626",
+  redSoft: "rgba(220,38,38,0.10)",
+  redLine: "rgba(220,38,38,0.22)",
+  buttonBlue: "linear-gradient(180deg, rgba(37,99,235,1) 0%, rgba(29,78,216,1) 100%)",
 };
 
-type NormalizedJob = {
-  id: string;
-  status: string;
-  customerName: string;
-  customerPhone: string;
-  vehicleYear: string;
-  vehicleMake: string;
-  vehicleModel: string;
-  vehicleVin: string;
-  concern: string;
-  work?: WorkData;
-};
-
-export default function ShopProofWorkPage() {
+export default function WorkPage() {
   const params = useParams();
   const router = useRouter();
   const id = String(params?.id || "");
 
   const [rawJob, setRawJob] = useState<AnyJob | null>(null);
   const [loading, setLoading] = useState(true);
-  const [savedMessage, setSavedMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [shopId, setShopId] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [width, setWidth] = useState(1440);
 
-  const [work, setWork] = useState<WorkData>({
-    technician: "",
-    findings: "",
-    workPerformed: "",
-    recommendedRepairs: "",
-    internalNotes: "",
-    photos: {},
-  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activePhotoKeyRef = useRef<string | null>(null);
+
+  const [technician, setTechnician] = useState("");
+  const [findings, setFindings] = useState("");
+  const [workPerformed, setWorkPerformed] = useState("");
+  const [recommendedRepairs, setRecommendedRepairs] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
 
   useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const isMobile = width < 820;
+
+  const loadJob = useCallback(async () => {
     if (!id) return;
+    setLoading(true);
 
-    try {
-      const jobs = getJobs();
-      const found = Array.isArray(jobs)
-        ? jobs.find((j: AnyJob) => String(j?.id) === id)
-        : null;
+    const supabase = getSupabaseClient();
+    let jobData: AnyJob | null = null;
 
-      setRawJob(found || null);
+    if (supabase) {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user) {
+          setUserId(userData.user.id);
+          const { data: shop } = await supabase
+            .from("shops")
+            .select("id")
+            .eq("owner_id", userData.user.id)
+            .maybeSingle();
+          if (shop) setShopId(shop.id);
+        }
 
-      if ((found as any)?.work) {
-        setWork({
-          technician: (found as any).work.technician || "",
-          findings: (found as any).work.findings || "",
-          workPerformed: (found as any).work.workPerformed || "",
-          recommendedRepairs: (found as any).work.recommendedRepairs || "",
-          internalNotes: (found as any).work.internalNotes || "",
-          photos: (found as any).work.photos || {},
-          updatedAt: (found as any).work.updatedAt,
-        });
-      } else {
-        setWork((prev) => ({
-          ...prev,
-          technician: (found as any)?.writtenBy || (found as any)?.written_by || "",
-        }));
+        const { data, error } = await supabase
+          .from("jobs")
+          .select(`
+            *,
+            customer:customers!jobs_customer_id_fkey(id, name, phone),
+            vehicle:vehicles!jobs_vehicle_id_fkey(id, vin, year, make, model)
+          `)
+          .eq("id", id)
+          .maybeSingle();
+
+        if (!error && data) {
+          jobData = data;
+        }
+
+        // Load evidence
+        const { data: evidenceData } = await supabase
+          .from("evidence")
+          .select("*")
+          .eq("job_id", id)
+          .order("created_at", { ascending: true });
+
+        if (evidenceData) {
+          setEvidence(
+            evidenceData.map((e: any) => ({
+              id: e.id,
+              label: e.label,
+              category: e.category,
+              key: e.label.toLowerCase().replace(/[^a-z0-9]/g, "_"),
+              publicUrl: e.public_url,
+              capturedAt: e.captured_at,
+            }))
+          );
+        }
+      } catch {
+        // fall through
       }
-    } catch (err) {
-      console.warn("Work page local load unavailable.", err);
-      setRawJob(null);
-    } finally {
-      setLoading(false);
     }
+
+    if (!jobData) {
+      try {
+        const raw = localStorage.getItem("shopproof_jobs");
+        const jobs = raw ? JSON.parse(raw) : [];
+        jobData = jobs.find((j: AnyJob) => String(j?.id) === id) || null;
+      } catch {
+        jobData = null;
+      }
+    }
+
+    setRawJob(jobData);
+
+    if (jobData) {
+      setTechnician(sv(jobData?.written_by || jobData?.writtenBy || jobData?.work?.technician || ""));
+      setFindings(sv(jobData?.findings || jobData?.work?.findings || ""));
+      setWorkPerformed(sv(jobData?.work_performed || jobData?.workPerformed || jobData?.work?.workPerformed || ""));
+      setRecommendedRepairs(sv(jobData?.recommended_repairs || jobData?.recommendedRepairs || jobData?.work?.recommendedRepairs || ""));
+      setInternalNotes(sv(jobData?.internal_notes || jobData?.internalNotes || jobData?.work?.internalNotes || ""));
+    }
+
+    setLoading(false);
   }, [id]);
 
-  const job = useMemo(() => normalizeJob(rawJob), [rawJob]);
+  useEffect(() => { loadJob(); }, [loadJob]);
 
-  function updateWork(field: keyof WorkData, value: any) {
-    setWork((prev) => ({ ...prev, [field]: value }));
-    setSavedMessage("");
-  }
+  const job = useMemo(() => rawJob ? normalizeJob(rawJob) : null, [rawJob]);
 
-  function togglePhoto(key: string) {
-    setWork((prev) => ({
-      ...prev,
-      photos: {
-        ...prev.photos,
-        [key]: !prev.photos[key],
-      },
-    }));
-    setSavedMessage("");
-  }
+  async function saveWork() {
+    if (!id) return;
+    setSaving(true);
+    setSavedMsg("");
 
-  function saveWorkRecord() {
-    try {
-      const jobs = getJobs();
+    const supabase = getSupabaseClient();
+    const now = new Date().toISOString();
 
-      const nextWork: WorkData = {
-        ...work,
-        updatedAt: new Date().toISOString(),
-      };
+    const update = {
+      findings,
+      work_performed: workPerformed,
+      recommended_repairs: recommendedRepairs,
+      internal_notes: internalNotes,
+      written_by: technician,
+      status: "In Progress",
+      updated_at: now,
+    };
 
-      const updatedJobs = Array.isArray(jobs)
-        ? jobs.map((j: AnyJob) => {
-            if (String(j?.id) !== id) return j;
-
-            return {
-              ...j,
-              status:
-                String(j?.status || "").toLowerCase().includes("complete") ||
-                String(j?.status || "").toLowerCase().includes("release")
-                  ? j.status
-                  : "In Progress",
-              updatedAt: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              work: nextWork,
-            };
-          })
-        : [];
-
-      localStorage.setItem("shopproof_jobs", JSON.stringify(updatedJobs));
-      localStorage.setItem("shopproofJobs", JSON.stringify(updatedJobs));
-
-      const refreshed = updatedJobs.find((j: AnyJob) => String(j?.id) === id);
-      setRawJob(refreshed || rawJob);
-      setWork(nextWork);
-      setSavedMessage("Work record saved.");
-    } catch (err) {
-      console.warn("Work page save unavailable.", err);
-      setSavedMessage("Could not save work record.");
+    if (supabase) {
+      try {
+        await supabase.from("jobs").update(update).eq("id", id);
+      } catch {
+        // ignore
+      }
     }
+
+    // Local update
+    try {
+      const raw = localStorage.getItem("shopproof_jobs");
+      const jobs = raw ? JSON.parse(raw) : [];
+      const updated = jobs.map((j: AnyJob) =>
+        String(j?.id) === id
+          ? {
+              ...j,
+              findings,
+              work_performed: workPerformed,
+              recommended_repairs: recommendedRepairs,
+              internal_notes: internalNotes,
+              written_by: technician,
+              status: j.status === "Completed" || j.status === "Released" ? j.status : "In Progress",
+              updated_at: now,
+              work: {
+                technician,
+                findings,
+                workPerformed,
+                recommendedRepairs,
+                internalNotes,
+                updatedAt: now,
+              },
+            }
+          : j
+      );
+      localStorage.setItem("shopproof_jobs", JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
+    setSavedMsg("Work record saved.");
+    setSaving(false);
+    setTimeout(() => setSavedMsg(""), 3000);
   }
+
+  function triggerPhotoUpload(photoKey: string) {
+    activePhotoKeyRef.current = photoKey;
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const photoKey = activePhotoKeyRef.current;
+    if (!file || !photoKey) return;
+
+    const photoMeta = PHOTO_LIST.find((p) => p.key === photoKey);
+    if (!photoMeta) return;
+
+    setUploadingKey(photoKey);
+
+    const supabase = getSupabaseClient();
+    let publicUrl = "";
+
+    if (supabase && userId) {
+      try {
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `${userId}/${id}/${photoKey}_${Date.now()}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("evidence")
+          .upload(path, file, { upsert: false });
+
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage
+            .from("evidence")
+            .getPublicUrl(path);
+          publicUrl = urlData?.publicUrl || "";
+
+          await supabase.from("evidence").insert({
+            job_id: id,
+            shop_id: shopId,
+            uploaded_by: userId,
+            category: photoMeta.category,
+            label: photoMeta.label,
+            storage_path: path,
+            public_url: publicUrl,
+            captured_at: new Date().toISOString(),
+          });
+        }
+      } catch {
+        // fall through to preview
+      }
+    }
+
+    if (!publicUrl) {
+      // Provide an object URL for local preview if upload failed
+      publicUrl = URL.createObjectURL(file);
+    }
+
+    setEvidence((prev) => {
+      const existing = prev.findIndex((e) => e.key === photoKey);
+      const item: EvidenceItem = {
+        label: photoMeta.label,
+        category: photoMeta.category,
+        key: photoKey,
+        publicUrl,
+        capturedAt: new Date().toISOString(),
+      };
+      if (existing >= 0) {
+        const next = [...prev];
+        next[existing] = item;
+        return next;
+      }
+      return [...prev, item];
+    });
+
+    setUploadingKey(null);
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function removeEvidence(photoKey: string) {
+    const item = evidence.find((e) => e.key === photoKey);
+    if (!item?.id) {
+      setEvidence((prev) => prev.filter((e) => e.key !== photoKey));
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from("evidence").delete().eq("id", item.id);
+      } catch {
+        // ignore
+      }
+    }
+    setEvidence((prev) => prev.filter((e) => e.key !== photoKey));
+  }
+
+  const capturedCount = evidence.length;
 
   if (loading) {
-    return <CenteredMessage title="Loading work record..." />;
+    return (
+      <main style={pageStyle}>
+        <div style={centerCardStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, color: THEME.textSoft, fontWeight: 800, fontSize: 14 }}>
+            <LoaderCircle size={17} className="spin" />
+            Loading work record...
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (!job?.id) {
     return (
-      <CenteredMessage
-        title="Aww, Snap! Job not found"
-        detail="Return to the dashboard and open the job from the active list."
-        actionLabel="Back to Dashboard"
-        onAction={() => router.push("/shopproof/dashboard")}
-      />
+      <main style={pageStyle}>
+        <div style={centerCardStyle}>
+          <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 10, color: THEME.text }}>Job not found</div>
+          <p style={{ fontSize: 13, color: THEME.textMuted, marginBottom: 16, lineHeight: 1.5 }}>
+            Return to the dashboard and open the job from the active list.
+          </p>
+          <button type="button" onClick={() => router.push("/shopproof/dashboard")} style={primaryButtonStyle}>
+            Back to Dashboard
+          </button>
+        </div>
+      </main>
     );
   }
 
   const vehicleTitle =
-    [job.vehicleYear, job.vehicleMake, job.vehicleModel]
-      .filter(Boolean)
-      .join(" ") || "Vehicle Record";
-
-  const completedPhotos = PHOTO_LIST.filter((p) => work.photos[p.key]).length;
+    [job.vehicleYear, job.vehicleMake, job.vehicleModel].filter(Boolean).join(" ") || "Vehicle Record";
 
   return (
     <main style={pageStyle}>
-      <section style={shellStyle}>
-        <header style={topbarStyle}>
+      <div
+        style={{
+          maxWidth: 1320,
+          margin: "0 auto",
+          background: THEME.shell,
+          border: THEME.shellBorder,
+          borderRadius: 30,
+          boxShadow: THEME.shellShadow,
+          overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <header
+          style={{
+            background: THEME.topbar,
+            borderBottom: `1px solid ${THEME.line}`,
+            padding: isMobile ? "14px 12px" : "16px 20px",
+            display: "grid",
+            gridTemplateColumns: "auto 1fr auto",
+            gap: 14,
+            alignItems: "center",
+          }}
+        >
           <button
             type="button"
-            onClick={() => router.push(`/shopproof/jobs/${job.id}`)}
+            onClick={() => router.push(`/shopproof/jobs/${id}`)}
             style={backButtonStyle}
           >
-            <ArrowLeft size={18} />
-            Back to Job
+            <ArrowLeft size={15} />
+            {isMobile ? "" : "Back to Job"}
           </button>
 
           <div>
             <div style={eyebrowStyle}>Technician Working Surface</div>
-            <h1 style={titleStyle}>{vehicleTitle}</h1>
+            <h1 style={isMobile ? { ...titleStyle, fontSize: 20 } : titleStyle}>{vehicleTitle}</h1>
             <p style={subtitleStyle}>
-              {job.customerName || "Unknown Customer"} •{" "}
-              {job.customerPhone || "No Phone"}
+              {job.customerName} • {job.customerPhone}
             </p>
           </div>
 
-          <div style={statusPillStyle}>
-            <Wrench size={17} />
-            Work Record
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              borderRadius: 999,
+              border: `1px solid ${THEME.blueLine}`,
+              background: THEME.blueSoft,
+              color: THEME.blueStrong,
+              padding: "8px 12px",
+              fontSize: 12,
+              fontWeight: 950,
+            }}
+          >
+            <Wrench size={14} />
+            {isMobile ? "" : "Work Record"}
           </div>
         </header>
 
-        <section style={bodyGridStyle}>
-          <aside style={sidePanelStyle}>
-            <PanelTitle title="Job Snapshot" />
-
-            <Info label="Customer" value={job.customerName} />
-            <Info label="Phone" value={job.customerPhone} />
-            <Info label="Vehicle" value={vehicleTitle} />
-            <Info label="VIN" value={job.vehicleVin} mono />
-            <Info label="Concern" value={job.concern} />
-
-            <div style={noticeBoxStyle}>
-              This page adds technician documentation without overwriting the
-              original intake record.
+        {/* Body */}
+        <div
+          style={{
+            padding: isMobile ? "12px 10px" : "18px",
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "340px 1fr",
+            gap: 16,
+            alignItems: "start",
+          }}
+        >
+          {/* Sidebar snapshot */}
+          <aside
+            style={{
+              display: "grid",
+              gap: 14,
+              position: isMobile ? undefined : "sticky",
+              top: 18,
+            }}
+          >
+            <div
+              style={{
+                borderRadius: 24,
+                border: THEME.panelBorder,
+                background: THEME.panel,
+                boxShadow: THEME.panelShadow,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  padding: "13px 14px 11px",
+                  borderBottom: `1px solid ${THEME.line}`,
+                  fontSize: 15,
+                  fontWeight: 950,
+                  letterSpacing: "-0.03em",
+                  color: THEME.text,
+                }}
+              >
+                Job Snapshot
+              </div>
+              <div style={{ padding: "12px 14px", display: "grid", gap: 10 }}>
+                {[
+                  { label: "Customer", value: job.customerName },
+                  { label: "Phone", value: job.customerPhone },
+                  { label: "Vehicle", value: vehicleTitle },
+                  { label: "VIN", value: job.vehicleVin, mono: true },
+                  { label: "Concern", value: job.concern },
+                ].map(({ label, value, mono }) => (
+                  <div
+                    key={label}
+                    style={{
+                      borderRadius: 12,
+                      border: THEME.cardBorder,
+                      background: THEME.card,
+                      padding: "9px 11px",
+                    }}
+                  >
+                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.08em", textTransform: "uppercase", color: THEME.textMuted, marginBottom: 4 }}>
+                      {label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 800,
+                        color: THEME.textSoft,
+                        wordBreak: "break-word",
+                        fontFamily: mono ? "ui-monospace, SFMono-Regular, Menlo, monospace" : undefined,
+                      }}
+                    >
+                      {value || "—"}
+                    </div>
+                  </div>
+                ))}
+                <div
+                  style={{
+                    borderRadius: 12,
+                    border: `1px solid ${THEME.blueLine}`,
+                    background: THEME.blueSoft,
+                    color: THEME.textSoft,
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                    padding: "10px 11px",
+                    fontWeight: 750,
+                  }}
+                >
+                  Technician documentation is added here without overwriting the original intake record.
+                </div>
+              </div>
             </div>
           </aside>
 
-          <section style={mainPanelStyle}>
-            <PanelTitle title="Technician Record" />
+          {/* Main panel */}
+          <div style={{ display: "grid", gap: 14 }}>
+            {/* Technician Record */}
+            <div
+              style={{
+                borderRadius: 24,
+                border: THEME.panelBorder,
+                background: THEME.panel,
+                boxShadow: THEME.panelShadow,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  padding: "13px 16px 11px",
+                  borderBottom: `1px solid ${THEME.line}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <span
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 9,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: THEME.blue,
+                    background: THEME.blueSoft,
+                    border: `1px solid ${THEME.blueLine}`,
+                  }}
+                >
+                  <Wrench size={15} />
+                </span>
+                <div style={{ fontSize: 15, fontWeight: 950, letterSpacing: "-0.03em", color: THEME.text }}>
+                  Technician Record
+                </div>
+              </div>
 
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Technician / Written By</span>
-              <input
-                style={inputStyle}
-                value={work.technician}
-                onChange={(e) => updateWork("technician", e.target.value)}
-                placeholder="Technician name"
-              />
-            </label>
+              <div style={{ padding: "14px 16px", display: "grid", gap: 14 }}>
+                <FieldGroup label="Technician / Written By">
+                  <input
+                    style={inputStyle}
+                    value={technician}
+                    onChange={(e) => setTechnician(e.target.value)}
+                    placeholder="Technician name"
+                  />
+                </FieldGroup>
 
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Findings / Diagnostics</span>
-              <textarea
-                style={textareaStyle}
-                value={work.findings}
-                onChange={(e) => updateWork("findings", e.target.value)}
-                placeholder="What was found, verified, tested, confirmed, or ruled out?"
-              />
-            </label>
+                <FieldGroup label="Findings / Diagnostics">
+                  <textarea
+                    style={textareaStyle}
+                    value={findings}
+                    onChange={(e) => setFindings(e.target.value)}
+                    placeholder="What was found, verified, tested, confirmed, or ruled out?"
+                    rows={4}
+                  />
+                </FieldGroup>
 
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Work Performed</span>
-              <textarea
-                style={textareaStyle}
-                value={work.workPerformed}
-                onChange={(e) => updateWork("workPerformed", e.target.value)}
-                placeholder="Work completed, parts installed, resets, test drives, adjustments, etc."
-              />
-            </label>
+                <FieldGroup label="Work Performed">
+                  <textarea
+                    style={textareaStyle}
+                    value={workPerformed}
+                    onChange={(e) => setWorkPerformed(e.target.value)}
+                    placeholder="Work completed, parts installed, resets, test drives, adjustments..."
+                    rows={4}
+                  />
+                </FieldGroup>
 
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Recommended Repairs / Next Steps</span>
-              <textarea
-                style={textareaStyle}
-                value={work.recommendedRepairs}
-                onChange={(e) =>
-                  updateWork("recommendedRepairs", e.target.value)
-                }
-                placeholder="Recommended repairs, declined items, safety concerns, or next diagnostic steps."
-              />
-            </label>
+                <FieldGroup label="Recommended Repairs / Next Steps">
+                  <textarea
+                    style={textareaStyle}
+                    value={recommendedRepairs}
+                    onChange={(e) => setRecommendedRepairs(e.target.value)}
+                    placeholder="Recommended repairs, declined items, safety concerns, or next diagnostic steps."
+                    rows={3}
+                  />
+                </FieldGroup>
 
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Internal Notes</span>
-              <textarea
-                style={textareaStyle}
-                value={work.internalNotes}
-                onChange={(e) => updateWork("internalNotes", e.target.value)}
-                placeholder="Internal-only shop notes."
-              />
-            </label>
-          </section>
-        </section>
-
-        <section style={photoPanelStyle}>
-          <div style={photoHeaderStyle}>
-            <div>
-              <div style={panelTitleStyle}>Photo Evidence Checklist</div>
-              <div style={panelSubtitleStyle}>
-                Required intake/work evidence before final release.
+                <FieldGroup label="Internal Notes (Shop Only)">
+                  <textarea
+                    style={textareaStyle}
+                    value={internalNotes}
+                    onChange={(e) => setInternalNotes(e.target.value)}
+                    placeholder="Internal-only shop notes — not visible to customer."
+                    rows={2}
+                  />
+                </FieldGroup>
               </div>
             </div>
 
-            <div style={photoCountStyle}>
-              <Camera size={17} />
-              {completedPhotos}/{PHOTO_LIST.length}
-            </div>
-          </div>
-
-          <div style={photoGridStyle}>
-            {PHOTO_LIST.map((photo) => (
-              <button
-                key={photo.key}
-                type="button"
-                onClick={() => togglePhoto(photo.key)}
+            {/* Photo Evidence */}
+            <div
+              style={{
+                borderRadius: 24,
+                border: THEME.panelBorder,
+                background: THEME.panel,
+                boxShadow: THEME.panelShadow,
+                overflow: "hidden",
+              }}
+            >
+              <div
                 style={{
-                  ...photoCardStyle,
-                  border: work.photos[photo.key]
-                    ? "1px solid rgba(37,99,235,0.55)"
-                    : photoCardStyle.border,
-                  background: work.photos[photo.key]
-                    ? "rgba(219,234,254,0.72)"
-                    : photoCardStyle.background,
+                  padding: "13px 16px 11px",
+                  borderBottom: `1px solid ${THEME.line}`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
                 }}
               >
-                <div style={photoBoxStyle}>
-                  <Camera size={22} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 9,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: THEME.blue,
+                      background: THEME.blueSoft,
+                      border: `1px solid ${THEME.blueLine}`,
+                    }}
+                  >
+                    <Camera size={15} />
+                  </span>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 950, letterSpacing: "-0.03em", color: THEME.text }}>
+                      Photo Evidence
+                    </div>
+                    <div style={{ fontSize: 11, color: THEME.textMuted, marginTop: 2 }}>
+                      Required intake and work evidence for final release
+                    </div>
+                  </div>
                 </div>
-                <div style={photoLabelStyle}>{photo.label}</div>
-                <div style={photoHintStyle}>{photo.group}</div>
-                <div style={checkboxTextStyle}>
-                  {work.photos[photo.key] ? "✓ Captured" : "○ Needed"}
+
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    borderRadius: 999,
+                    background: "rgba(15,23,42,0.88)",
+                    color: "#fff",
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    fontWeight: 950,
+                  }}
+                >
+                  <Camera size={13} />
+                  {capturedCount}/{PHOTO_LIST.length}
                 </div>
+              </div>
+
+              <div
+                style={{
+                  padding: "14px 16px",
+                  display: "grid",
+                  gridTemplateColumns: isMobile
+                    ? "repeat(2, minmax(0, 1fr))"
+                    : "repeat(4, minmax(0, 1fr))",
+                  gap: 10,
+                }}
+              >
+                {PHOTO_LIST.map((photo) => {
+                  const captured = evidence.find((e) => e.key === photo.key);
+                  const isUploading = uploadingKey === photo.key;
+
+                  return (
+                    <div
+                      key={photo.key}
+                      style={{
+                        borderRadius: 16,
+                        border: captured
+                          ? `1px solid ${THEME.emeraldLine}`
+                          : THEME.cardBorder,
+                        background: captured ? THEME.emeraldSoft : THEME.card,
+                        overflow: "hidden",
+                        position: "relative",
+                      }}
+                    >
+                      {captured?.publicUrl ? (
+                        <div style={{ position: "relative" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={captured.publicUrl}
+                            alt={photo.label}
+                            style={{
+                              width: "100%",
+                              height: 80,
+                              objectFit: "cover",
+                              display: "block",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeEvidence(photo.key)}
+                            style={{
+                              position: "absolute",
+                              top: 5,
+                              right: 5,
+                              width: 24,
+                              height: 24,
+                              borderRadius: 999,
+                              background: "rgba(220,38,38,0.88)",
+                              border: "none",
+                              color: "#fff",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => triggerPhotoUpload(photo.key)}
+                          disabled={!!uploadingKey}
+                          style={{
+                            width: "100%",
+                            height: 80,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "rgba(226,236,246,0.58)",
+                            border: "none",
+                            cursor: uploadingKey ? "not-allowed" : "pointer",
+                            color: THEME.textDim,
+                          }}
+                        >
+                          {isUploading ? (
+                            <LoaderCircle size={20} className="spin" />
+                          ) : (
+                            <Upload size={20} />
+                          )}
+                        </button>
+                      )}
+
+                      <div style={{ padding: "8px 10px 10px" }}>
+                        <div style={{ fontSize: 11, fontWeight: 900, color: THEME.text, lineHeight: 1.2 }}>
+                          {photo.label}
+                        </div>
+                        <div style={{ fontSize: 10, color: THEME.textMuted, fontWeight: 800, marginTop: 3, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                          {photo.category}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 10,
+                            fontWeight: 950,
+                            color: captured ? THEME.emerald : THEME.textDim,
+                          }}
+                        >
+                          {captured ? "✓ Captured" : "○ Needed"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 12,
+                paddingBottom: 6,
+              }}
+            >
+              <button
+                type="button"
+                onClick={saveWork}
+                disabled={saving}
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: saving ? 0.72 : 1,
+                  cursor: saving ? "not-allowed" : "pointer",
+                }}
+              >
+                {saving ? (
+                  <><LoaderCircle size={16} className="spin" /> Saving...</>
+                ) : (
+                  <><Save size={16} /> Save Work Record</>
+                )}
               </button>
-            ))}
+
+              <button
+                type="button"
+                onClick={() => router.push(`/shopproof/jobs/${id}/work-order`)}
+                style={outlineButtonStyle}
+              >
+                <FileText size={16} />
+                Print Technician Sheet
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push(`/shopproof/jobs/${id}/final`)}
+                style={outlineButtonStyle}
+              >
+                <CheckCircle size={16} />
+                Open Final Release
+              </button>
+            </div>
+
+            {savedMsg ? (
+              <div
+                style={{
+                  borderRadius: 14,
+                  border: `1px solid ${THEME.emeraldLine}`,
+                  background: THEME.emeraldSoft,
+                  color: THEME.emerald,
+                  fontSize: 13,
+                  fontWeight: 900,
+                  padding: "11px 13px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <CheckCircle size={15} />
+                {savedMsg}
+              </div>
+            ) : null}
           </div>
-        </section>
+        </div>
+      </div>
 
-        <footer style={actionsStyle}>
-          <button type="button" style={primaryButtonStyle} onClick={saveWorkRecord}>
-            <Save size={18} />
-            Save Work Record
-          </button>
+      {/* Hidden file input for photo capture */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={handleFileSelected}
+      />
 
-          <button
-            type="button"
-            style={outlineButtonStyle}
-            onClick={() => router.push(`/shopproof/jobs/${job.id}/work-order`)}
-          >
-            <FileText size={18} />
-            Print Technician Sheet
-          </button>
-
-          <button
-            type="button"
-            style={outlineButtonStyle}
-            onClick={() => router.push(`/shopproof/jobs/${job.id}/final`)}
-          >
-            Open Final Release
-          </button>
-        </footer>
-
-        {savedMessage ? <div style={savedBoxStyle}>{savedMessage}</div> : null}
-      </section>
+      <style jsx global>{`
+        .spin {
+          animation: spin 1s linear infinite;
+          display: inline-block;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        input::placeholder, textarea::placeholder {
+          color: ${THEME.textDim};
+          font-weight: 600;
+        }
+        input, textarea, select {
+          font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        }
+      `}</style>
     </main>
   );
 }
 
-function normalizeJob(job: AnyJob): NormalizedJob {
-  if (!job) {
-    return {
-      id: "",
-      status: "",
-      customerName: "",
-      customerPhone: "",
-      vehicleYear: "",
-      vehicleMake: "",
-      vehicleModel: "",
-      vehicleVin: "",
-      concern: "",
-    };
-  }
+function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "grid", gap: 7 }}>
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 900,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: THEME.textDim,
+        }}
+      >
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
 
-  const vehicle = job?.vehicles || job?.vehicle || {};
-  const customer = job?.customers || job?.customer || {};
-  const notes = stringValue(job?.notes || job?.intake_notes || "");
-
+function normalizeJob(job: AnyJob) {
+  const vehicle = job?.vehicle || job?.vehicles || {};
+  const customer = job?.customer || job?.customers || {};
   return {
-    id: stringValue(job?.id),
-    status: stringValue(job?.status || "New Intake"),
-    customerName: firstNonEmpty(
-      job?.customer_name,
-      job?.customerName,
-      customer?.name,
-      joinName(customer?.firstName, customer?.lastName),
-      vehicle?.customer_name
-    ),
-    customerPhone: firstNonEmpty(
-      job?.customer_phone,
-      job?.customerPhone,
-      customer?.phone,
-      vehicle?.customer_phone
-    ),
-    vehicleYear: firstNonEmpty(vehicle?.year, job?.vehicle_year, job?.vehicleYear),
-    vehicleMake: firstNonEmpty(vehicle?.make, job?.vehicle_make, job?.vehicleMake),
-    vehicleModel: firstNonEmpty(
-      vehicle?.model,
-      job?.vehicle_model,
-      job?.vehicleModel
-    ),
-    vehicleVin: firstNonEmpty(vehicle?.vin, job?.vin, job?.vehicle_vin, job?.vehicleVin),
-    concern: firstNonEmpty(
-      job?.concern,
-      job?.customerConcern,
-      job?.complaint,
-      parseSnapshotValue(notes, "Customer Concern"),
-      parseSnapshotValue(notes, "Requested Work")
-    ),
-    work: job?.work,
+    id: sv(job?.id),
+    status: sv(job?.status || "New Intake"),
+    customerName: fne(job?.customer_name, customer?.name),
+    customerPhone: fne(job?.customer_phone, customer?.phone),
+    vehicleYear: fne(vehicle?.year, job?.vehicle_year),
+    vehicleMake: fne(vehicle?.make, job?.vehicle_make),
+    vehicleModel: fne(vehicle?.model, job?.vehicle_model),
+    vehicleVin: fne(vehicle?.vin, job?.vin),
+    concern: fne(job?.concern, job?.customerConcern),
   };
 }
 
-function firstNonEmpty(...values: unknown[]) {
-  for (const value of values) {
-    const clean = stringValue(value);
-    if (clean && clean !== "N/A") return clean;
+function sv(value: unknown) {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function fne(...values: unknown[]) {
+  for (const v of values) {
+    const c = sv(v);
+    if (c && c !== "N/A") return c;
   }
   return "";
 }
 
-function stringValue(value: unknown) {
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
-}
-
-function joinName(first?: unknown, last?: unknown) {
-  return [stringValue(first), stringValue(last)].filter(Boolean).join(" ");
-}
-
-function parseSnapshotValue(notes: string, label: string) {
-  if (!notes) return "";
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = notes.match(new RegExp(`${escaped}:\\s*(.*)`, "i"));
-  return match?.[1]?.trim() || "";
-}
-
-function PanelTitle({ title }: { title: string }) {
-  return (
-    <div style={panelHeaderStyle}>
-      <div style={panelTitleStyle}>{title}</div>
-    </div>
-  );
-}
-
-function Info({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div style={infoBoxStyle}>
-      <div style={labelStyle}>{label}</div>
-      <div style={mono ? monoValueStyle : infoValueStyle}>{value || "—"}</div>
-    </div>
-  );
-}
-
-function CenteredMessage({
-  title,
-  detail,
-  actionLabel,
-  onAction,
-}: {
-  title: string;
-  detail?: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <main style={pageStyle}>
-      <section style={centerCardStyle}>
-        <h1 style={centerTitleStyle}>{title}</h1>
-        {detail ? <p style={subtitleStyle}>{detail}</p> : null}
-        {actionLabel && onAction ? (
-          <button type="button" onClick={onAction} style={primaryButtonStyle}>
-            {actionLabel}
-          </button>
-        ) : null}
-      </section>
-    </main>
-  );
-}
-
-const PHOTO_LIST = [
-  { key: "front", label: "Front Exterior", group: "Exterior" },
-  { key: "rear", label: "Rear Exterior", group: "Exterior" },
-  { key: "driverSide", label: "Driver Side", group: "Exterior" },
-  { key: "passengerSide", label: "Passenger Side", group: "Exterior" },
-  { key: "lfWheel", label: "LF Wheel", group: "Wheels" },
-  { key: "rfWheel", label: "RF Wheel", group: "Wheels" },
-  { key: "lrWheel", label: "LR Wheel", group: "Wheels" },
-  { key: "rrWheel", label: "RR Wheel", group: "Wheels" },
-  { key: "seatConsole", label: "Seat / Console", group: "Interior" },
-  { key: "doorPanel", label: "Driver Door Panel", group: "Interior" },
-  { key: "dash", label: "Dash / Odometer", group: "Interior" },
-  { key: "underhood", label: "Underhood", group: "Optional" },
-  { key: "damage", label: "Damage Close-Up", group: "Optional" },
-  { key: "scanTool", label: "Scan Tool Screen", group: "Optional" },
-  { key: "failedPart", label: "Failed Part", group: "Optional" },
-  { key: "repairProgress", label: "Repair Progress", group: "Optional" },
-];
-
 const pageStyle: CSSProperties = {
   minHeight: "100vh",
-  background:
-    "radial-gradient(circle at 12% 0%, rgba(37,99,235,0.12), transparent 34%), linear-gradient(180deg, #e8f0f8 0%, #d9e4ee 52%, #edf4fb 100%)",
-  padding: 22,
-  color: "#132031",
-  fontFamily:
-    "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-};
-
-const shellStyle: CSSProperties = {
-  maxWidth: 1220,
-  margin: "0 auto",
-};
-
-const topbarStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "auto 1fr auto",
-  gap: 16,
-  alignItems: "center",
-  marginBottom: 18,
+  backgroundImage: THEME.page,
+  color: THEME.text,
+  padding: 18,
+  fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
 };
 
 const backButtonStyle: CSSProperties = {
-  minHeight: 42,
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  borderRadius: 14,
-  border: "1px solid rgba(84,108,131,0.22)",
+  height: 38,
+  borderRadius: 12,
+  border: THEME.cardBorder,
   background: "rgba(255,255,255,0.78)",
-  color: "#132031",
-  padding: "0 14px",
+  color: THEME.text,
+  padding: "0 13px",
   fontSize: 13,
   fontWeight: 900,
   cursor: "pointer",
-  boxShadow: "0 12px 24px rgba(27,40,56,0.07)",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  boxShadow: THEME.cardShadow,
 };
 
 const eyebrowStyle: CSSProperties = {
   fontSize: 11,
   letterSpacing: "0.14em",
   textTransform: "uppercase",
-  color: "#1d4ed8",
-  fontWeight: 950,
+  color: THEME.blueStrong,
+  fontWeight: 900,
 };
 
 const titleStyle: CSSProperties = {
-  margin: "6px 0 0",
-  fontSize: 34,
-  lineHeight: 1,
+  margin: "5px 0 0",
+  fontSize: 28,
+  lineHeight: 1.05,
   fontWeight: 950,
-  letterSpacing: "-0.045em",
+  letterSpacing: "-0.04em",
+  color: THEME.text,
 };
 
 const subtitleStyle: CSSProperties = {
-  margin: "7px 0 0",
-  color: "#61758a",
-  fontSize: 13,
-  lineHeight: 1.5,
-};
-
-const statusPillStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  borderRadius: 999,
-  border: "1px solid rgba(37,99,235,0.28)",
-  background: "rgba(219,234,254,0.72)",
-  color: "#1d4ed8",
-  padding: "10px 13px",
-  fontSize: 13,
-  fontWeight: 950,
-};
-
-const bodyGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "340px 1fr",
-  gap: 16,
-  alignItems: "start",
-};
-
-const sidePanelStyle: CSSProperties = {
-  background:
-    "linear-gradient(180deg, rgba(250,252,255,0.98) 0%, rgba(239,245,251,1) 100%)",
-  border: "1px solid rgba(84,108,131,0.18)",
-  borderRadius: 24,
-  boxShadow: "0 16px 34px rgba(28,42,59,0.09)",
-  padding: 16,
-  display: "grid",
-  gap: 10,
-};
-
-const mainPanelStyle: CSSProperties = {
-  background:
-    "linear-gradient(180deg, rgba(250,252,255,0.98) 0%, rgba(239,245,251,1) 100%)",
-  border: "1px solid rgba(84,108,131,0.18)",
-  borderRadius: 24,
-  boxShadow: "0 16px 34px rgba(28,42,59,0.09)",
-  padding: 18,
-};
-
-const panelHeaderStyle: CSSProperties = {
-  marginBottom: 8,
-};
-
-const panelTitleStyle: CSSProperties = {
-  fontSize: 18,
-  lineHeight: 1.1,
-  fontWeight: 950,
-  letterSpacing: "-0.03em",
-};
-
-const panelSubtitleStyle: CSSProperties = {
-  marginTop: 5,
-  color: "#61758a",
-  fontSize: 13,
-};
-
-const infoBoxStyle: CSSProperties = {
-  borderRadius: 16,
-  border: "1px solid rgba(92,116,140,0.14)",
-  background:
-    "linear-gradient(180deg, rgba(247,250,254,0.98) 0%, rgba(239,245,251,1) 100%)",
-  padding: "12px 13px",
-};
-
-const labelStyle: CSSProperties = {
-  display: "block",
-  fontSize: 11,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  fontWeight: 900,
-  color: "#61758a",
-  marginBottom: 6,
-};
-
-const infoValueStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 850,
-  color: "#223347",
-  lineHeight: 1.35,
-  wordBreak: "break-word",
-};
-
-const monoValueStyle: CSSProperties = {
-  ...infoValueStyle,
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-};
-
-const noticeBoxStyle: CSSProperties = {
-  marginTop: 4,
-  borderRadius: 16,
-  border: "1px solid rgba(37,99,235,0.28)",
-  background: "rgba(37,99,235,0.10)",
-  color: "#223347",
+  margin: "5px 0 0",
   fontSize: 12,
-  lineHeight: 1.5,
-  padding: "11px 12px",
-  fontWeight: 750,
-};
-
-const fieldStyle: CSSProperties = {
-  display: "block",
-  marginBottom: 14,
+  color: THEME.textMuted,
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
   height: 46,
-  borderRadius: 14,
+  borderRadius: 12,
   border: "1px solid rgba(84,108,131,0.22)",
   background: "#ffffff",
-  color: "#132031",
-  padding: "0 13px",
+  color: THEME.text,
   fontSize: 14,
-  fontWeight: 750,
+  fontWeight: 700,
+  padding: "0 13px",
   boxSizing: "border-box",
+  outline: "none",
 };
 
 const textareaStyle: CSSProperties = {
   width: "100%",
-  minHeight: 110,
-  borderRadius: 16,
+  borderRadius: 14,
   border: "1px solid rgba(84,108,131,0.22)",
   background: "#ffffff",
-  color: "#132031",
-  padding: 13,
+  color: THEME.text,
   fontSize: 14,
-  lineHeight: 1.5,
+  lineHeight: 1.55,
+  padding: "11px 13px",
   resize: "vertical",
   boxSizing: "border-box",
-};
-
-const photoPanelStyle: CSSProperties = {
-  marginTop: 16,
-  background:
-    "linear-gradient(180deg, rgba(250,252,255,0.98) 0%, rgba(239,245,251,1) 100%)",
-  border: "1px solid rgba(84,108,131,0.18)",
-  borderRadius: 24,
-  boxShadow: "0 16px 34px rgba(28,42,59,0.09)",
-  padding: 18,
-};
-
-const photoHeaderStyle: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 14,
-  alignItems: "center",
-  marginBottom: 14,
-};
-
-const photoCountStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  borderRadius: 999,
-  background: "rgba(15,23,42,0.92)",
-  color: "#ffffff",
-  padding: "9px 12px",
-  fontSize: 13,
-  fontWeight: 950,
-};
-
-const photoGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  gap: 10,
-};
-
-const photoCardStyle: CSSProperties = {
-  textAlign: "left",
-  borderRadius: 16,
-  border: "1px solid rgba(92,116,140,0.16)",
-  background: "rgba(255,255,255,0.78)",
-  padding: 10,
-  cursor: "pointer",
-};
-
-const photoBoxStyle: CSSProperties = {
-  height: 54,
-  borderRadius: 12,
-  border: "1px dashed rgba(84,108,131,0.35)",
-  background: "rgba(226,236,246,0.58)",
-  display: "grid",
-  placeItems: "center",
-  color: "#61758a",
-  marginBottom: 8,
-};
-
-const photoLabelStyle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 950,
-  color: "#132031",
-};
-
-const photoHintStyle: CSSProperties = {
-  marginTop: 3,
-  fontSize: 11,
-  color: "#61758a",
-  fontWeight: 800,
-};
-
-const checkboxTextStyle: CSSProperties = {
-  marginTop: 8,
-  fontSize: 12,
-  fontWeight: 950,
-  color: "#1d4ed8",
-};
-
-const actionsStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 12,
-  marginTop: 16,
+  outline: "none",
 };
 
 const primaryButtonStyle: CSSProperties = {
-  minHeight: 50,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 9,
+  height: 50,
   borderRadius: 14,
   border: "1px solid rgba(29,78,216,0.36)",
-  background:
-    "linear-gradient(180deg, rgba(37,99,235,1) 0%, rgba(29,78,216,1) 100%)",
+  background: THEME.buttonBlue,
   color: "#ffffff",
-  padding: "0 16px",
   fontSize: 14,
   fontWeight: 950,
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(37,99,235,0.22)",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 9,
+  padding: "0 18px",
+  boxShadow: "0 12px 24px rgba(37,99,235,0.22)",
 };
 
 const outlineButtonStyle: CSSProperties = {
-  minHeight: 50,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 9,
+  height: 50,
   borderRadius: 14,
-  border: "1px solid rgba(84,108,131,0.22)",
+  border: THEME.cardBorder,
   background: "rgba(255,255,255,0.78)",
-  color: "#223347",
-  padding: "0 16px",
+  color: THEME.textSoft,
   fontSize: 14,
   fontWeight: 900,
   cursor: "pointer",
-};
-
-const savedBoxStyle: CSSProperties = {
-  marginTop: 14,
-  borderRadius: 16,
-  border: "1px solid rgba(5,150,105,0.25)",
-  background: "rgba(5,150,105,0.10)",
-  color: "#065f46",
-  padding: "12px 13px",
-  fontSize: 13,
-  fontWeight: 900,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 9,
+  padding: "0 18px",
 };
 
 const centerCardStyle: CSSProperties = {
   maxWidth: 520,
   margin: "15vh auto 0",
-  background:
-    "linear-gradient(180deg, rgba(250,252,255,0.98) 0%, rgba(239,245,251,1) 100%)",
-  border: "1px solid rgba(84,108,131,0.18)",
+  background: THEME.panel,
+  border: THEME.panelBorder,
   borderRadius: 24,
-  boxShadow: "0 16px 34px rgba(28,42,59,0.09)",
+  boxShadow: THEME.panelShadow,
   padding: 24,
-  textAlign: "center",
-};
-
-const centerTitleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 26,
-  fontWeight: 950,
 };

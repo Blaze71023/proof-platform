@@ -64,8 +64,29 @@ export default function WorkOrderPage() {
 
   useEffect(() => {
     if (!id) return;
-    const found = getJobById(id);
-    setJob(found || null);
+
+    async function load() {
+      const { getSupabaseClient } = await import("@/lib/supabase");
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase
+            .from("jobs")
+            .select(`
+              *,
+              customer:customers!jobs_customer_id_fkey(id, name, phone, email),
+              vehicle:vehicles!jobs_vehicle_id_fkey(id, vin, year, make, model, plate, color, mileage_in)
+            `)
+            .eq("id", id)
+            .maybeSingle();
+          if (!error && data) { setJob(data); return; }
+        } catch { /* fall through */ }
+      }
+      const found = getJobById(id);
+      setJob(found || null);
+    }
+
+    load();
   }, [id]);
 
   const normalized = useMemo<WorkOrderDraft | null>(() => {
