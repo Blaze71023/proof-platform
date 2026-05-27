@@ -4,15 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
-import {
-  AlertCircle,
-  ChevronRight,
-  Clock3,
-  FileText,
-  LoaderCircle,
-  Search,
-  Shield,
-} from "lucide-react";
+import { CircleAlert as AlertCircle, ChevronRight, Clock3, FileText, LoaderCircle, Search, Shield } from "lucide-react";
 
 type Accent = "blue" | "orange" | "emerald";
 type StatusTone = "blue" | "yellow" | "green" | "red";
@@ -678,17 +670,40 @@ export default function ShopProofDashboardPage() {
             </span>
           </div>
 
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 800,
-              color: THEME.textDim,
-              letterSpacing: "0.03em",
-              textTransform: "uppercase",
-              textAlign: "right",
-            }}
-          >
-            {auth.isOwner ? "Owner Access" : "ShopPROOF Access"}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Link
+              href="/account/billing"
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                color: THEME.textMuted,
+                textDecoration: "none",
+                padding: "5px 11px",
+                borderRadius: 999,
+                border: THEME.borderSoft,
+                background: "rgba(255,255,255,0.60)",
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+              }}
+            >
+              Billing
+            </Link>
+            <Link
+              href="/pricing"
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                color: THEME.blue,
+                textDecoration: "none",
+                padding: "5px 11px",
+                borderRadius: 999,
+                border: `1px solid rgba(47,107,255,0.22)`,
+                background: THEME.blueSoft,
+                letterSpacing: "0.04em",
+              }}
+            >
+              Upgrade
+            </Link>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { CSSProperties, useState } from "react";
-import { useRouter } from "next/navigation";
+import { CSSProperties, Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase";
 import { Shield, Eye, EyeOff, LoaderCircle } from "lucide-react";
 
@@ -23,9 +23,20 @@ const THEME = {
   errorText: "#fb7185",
 };
 
-export default function LoginPage() {
+export default function LoginPageWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPage />
+    </Suspense>
+  );
+}
+
+function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const searchParams = useSearchParams();
+  const [mode, setMode] = useState<"login" | "signup">(
+    searchParams.get("mode") === "signup" ? "signup" : "login"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -70,7 +81,8 @@ export default function LoginPage() {
       if (loginError) {
         setError(loginError.message);
       } else {
-        router.push("/shopproof/dashboard");
+        const next = searchParams.get("next");
+        router.push(next || "/shopproof/dashboard");
       }
     }
 
@@ -184,6 +196,14 @@ export default function LoginPage() {
               {mode === "login" ? "Create one" : "Sign in"}
             </button>
           </div>
+
+          {mode === "login" && (
+            <div style={{ textAlign: "center" }}>
+              <a href="/reset-password" style={{ fontSize: 12, color: THEME.textMuted, fontWeight: 700, textDecoration: "none" }}>
+                Forgot your password?
+              </a>
+            </div>
+          )}
         </div>
 
         <p style={footerTextStyle}>
