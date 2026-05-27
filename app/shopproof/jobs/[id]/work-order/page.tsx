@@ -53,6 +53,7 @@ export default function WorkOrderPage() {
   const [job, setJob] = useState<any>(null);
   const [draft, setDraft] = useState<WorkOrderDraft | null>(null);
   const [saveStatus, setSaveStatus] = useState("");
+  const [shopName, setShopName] = useState("Your Shop");
 
   useEffect(() => {
     if (!id) return;
@@ -62,7 +63,7 @@ export default function WorkOrderPage() {
       const supabase = getSupabaseClient();
       if (supabase) {
         try {
-          const { data, error } = await supabase
+          const { data: jobData, error } = await supabase
             .from("jobs")
             .select(`
               *,
@@ -71,7 +72,22 @@ export default function WorkOrderPage() {
             `)
             .eq("id", id)
             .maybeSingle();
-          if (!error && data) { setJob(data); return; }
+          if (!error && jobData) {
+            setJob(jobData);
+            // Load shop name from shops table
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                const { data: shop } = await supabase
+                  .from("shops")
+                  .select("name")
+                  .eq("owner_id", user.id)
+                  .maybeSingle();
+                if (shop?.name) setShopName(shop.name);
+              }
+            } catch { /* non-critical */ }
+            return;
+          }
         } catch { /* fall through */ }
       }
       const found = getJobById(id);
@@ -198,72 +214,71 @@ export default function WorkOrderPage() {
     setSaveStatus("Unsaved changes");
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (signedAlready || !draft) return;
+    setSaveStatus("Saving...");
 
+    // Persist to Supabase
+    try {
+      const { getSupabaseClient } = await import("@/lib/supabase");
+      const supabase = getSupabaseClient();
+      if (supabase && job?.id) {
+        const jobUpdates: Record<string, any> = {
+          concern: draft.visit.concern,
+          requested_work: draft.visit.requestedWork,
+          notes: draft.visit.additionalNotes,
+          written_by: draft.visit.writtenBy,
+          diagnostic_fee: draft.authorization.diagnosticsFee || null,
+          updated_at: new Date().toISOString(),
+        };
+        await supabase.from("jobs").update(jobUpdates).eq("id", job.id);
+
+        if (job.customer?.id) {
+          await supabase.from("customers").update({
+            name: draft.customer.name,
+            phone: draft.customer.phone,
+            email: draft.customer.email,
+          }).eq("id", job.customer.id);
+        }
+
+        if (job.vehicle?.id) {
+          await supabase.from("vehicles").update({
+            vin: draft.vehicle.vin,
+            mileage_in: draft.vehicle.mileageIn,
+            plate: draft.vehicle.plate,
+            color: draft.vehicle.color,
+          }).eq("id", job.vehicle.id);
+        }
+      }
+    } catch {
+      // fall through to local save
+    }
+
+    // Always update local state + localStorage
     const updatedJob = {
       ...job,
-      customer: {
-        ...(job?.customer || {}),
-        name: draft.customer.name,
-        phone: draft.customer.phone,
-        email: draft.customer.email,
-        address: draft.customer.address,
-      },
-      vehicle: {
-        ...(job?.vehicle || {}),
-        year: draft.vehicle.year,
-        make: draft.vehicle.make,
-        model: draft.vehicle.model,
-        vin: draft.vehicle.vin,
-        mileageIn: draft.vehicle.mileageIn,
-        plate: draft.vehicle.plate,
-        color: draft.vehicle.color,
-      },
-      visit: {
-        ...(job?.visit || {}),
-        concern: draft.visit.concern,
-        requestedWork: draft.visit.requestedWork,
-        additionalNotes: draft.visit.additionalNotes,
-        writtenBy: draft.visit.writtenBy,
-      },
-      authorization: {
-        ...(job?.authorization || {}),
-        diagnosticsFee: draft.authorization.diagnosticsFee,
-        authorizationStatus: draft.authorization.authorizationStatus,
-        signatureName: draft.authorization.signatureName,
-        signatureMethod: draft.authorization.signatureMethod,
-        signatureTimestamp: draft.authorization.signatureTimestamp,
-      },
-      customerName: draft.customer.name,
-      customerPhone: draft.customer.phone,
-      customerEmail: draft.customer.email,
-      customerAddress: draft.customer.address,
       concern: draft.visit.concern,
-      requestedWork: draft.visit.requestedWork,
-      additionalNotes: draft.visit.additionalNotes,
+      requested_work: draft.visit.requestedWork,
       notes: draft.visit.additionalNotes,
-      writtenBy: draft.visit.writtenBy,
-      diagnosticsFee: draft.authorization.diagnosticsFee,
-      updatedAt: new Date().toISOString(),
+      written_by: draft.visit.writtenBy,
+      diagnostic_fee: draft.authorization.diagnosticsFee,
+      updated_at: new Date().toISOString(),
     };
 
     try {
       const raw = window.localStorage.getItem("shopproof_jobs");
       const jobs = raw ? JSON.parse(raw) : [];
       const list = Array.isArray(jobs) ? jobs : [];
-      const exists = list.some((item: any) => item?.id === id);
-      const updatedJobs = exists
+      const updatedJobs = list.some((item: any) => item?.id === id)
         ? list.map((item: any) => (item?.id === id ? updatedJob : item))
         : [updatedJob, ...list];
-
       window.localStorage.setItem("shopproof_jobs", JSON.stringify(updatedJobs));
-      setJob(updatedJob);
-      setSaveStatus("Saved");
-    } catch (error) {
-      console.error("Work order save error:", error);
-      setSaveStatus("Save failed");
+    } catch {
+      // ignore
     }
+
+    setJob(updatedJob);
+    setSaveStatus("Saved");
   };
 
   const handlePrint = () => {
@@ -434,7 +449,7 @@ export default function WorkOrderPage() {
 
                 <div style={legalPanelStyle}>
                   <p style={legalTextStyle}>
-                    I authorize Auto Tune Pros to perform diagnostic inspection,
+                    I authorize {shopName} to perform diagnostic inspection,
                     testing, and related evaluation on the vehicle listed above.
                     I understand that diagnostic charges apply whether or not I
                     approve additional repairs after diagnosis.
@@ -553,7 +568,7 @@ export default function WorkOrderPage() {
             </div>
 
             <div style={footerStyle}>
-              <div>Auto Tune Pros</div>
+              <div>{shopName}</div>
               <div>Digitally documented and timestamped via ShopPROOF</div>
             </div>
           </div>
