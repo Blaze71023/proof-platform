@@ -3,15 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Circle,
-  Printer,
-  Save,
-  Shield,
-  Wrench,
-} from "lucide-react";
+import { ArrowLeft, CircleCheck as CheckCircle2, Circle, Printer, Save, Shield, Wrench } from "lucide-react";
 import { getJobById } from "@/lib/shopproof";
 
 type ApprovalStatus =
