@@ -1,8 +1,8 @@
 "use client";
 
-import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Camera, CircleCheck as CheckCircle, ChevronRight, Clock, FileText, LoaderCircle, Shield, Wrench } from "lucide-react";
+import { ArrowLeft, Camera, CircleCheck as CheckCircle, ChevronRight, Copy, ExternalLink, FileText, LoaderCircle, MessageSquare, Shield, Wrench, X } from "lucide-react";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type AnyJob = Record<string, any>;
@@ -94,7 +94,11 @@ export default function JobDetailPage() {
   const [rawJob, setRawJob] = useState<AnyJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [approvalModal, setApprovalModal] = useState<{ token: string; link: string } | null>(null);
+  const [approvalGenerating, setApprovalGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [width, setWidth] = useState(1440);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const onResize = () => setWidth(window.innerWidth);
@@ -186,6 +190,62 @@ export default function JobDetailPage() {
       prev ? { ...prev, status: newStatus, updated_at: new Date().toISOString() } : prev
     );
     setStatusUpdating(false);
+  }
+
+  async function openApprovalModal() {
+    if (!rawJob || approvalGenerating) return;
+    setApprovalGenerating(true);
+
+    let token = normalizeJob(rawJob).approvalToken;
+
+    if (!token) {
+      token = generateToken();
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          await supabase
+            .from("jobs")
+            .update({ approval_token: token, updated_at: new Date().toISOString() })
+            .eq("id", id);
+        } catch {
+          // ignore — still show modal with token
+        }
+      }
+      // Update local state so re-renders don't re-generate
+      setRawJob((prev: AnyJob | null) =>
+        prev ? { ...prev, approval_token: token } : prev
+      );
+      // Update localStorage if present
+      try {
+        const raw = localStorage.getItem("shopproof_jobs");
+        const jobs = raw ? JSON.parse(raw) : [];
+        const updated = jobs.map((j: AnyJob) =>
+          String(j?.id) === id ? { ...j, approval_token: token } : j
+        );
+        localStorage.setItem("shopproof_jobs", JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+    }
+
+    const link = `${window.location.origin}/shopproof/sign/${token}`;
+    setApprovalModal({ token, link });
+    setApprovalGenerating(false);
+  }
+
+  function copyLink(link: string) {
+    navigator.clipboard.writeText(link).catch(() => {
+      // fallback for contexts where clipboard API unavailable
+      const el = document.createElement("textarea");
+      el.value = link;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    });
+    setCopied(true);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
   }
 
   if (loading) {
@@ -432,12 +492,9 @@ export default function JobDetailPage() {
                   onClick={() => router.push(`/shopproof/jobs/${job.id}/work`)}
                 />
                 <ActionButton
-                  icon={<CheckCircle size={16} />}
-                  label="Customer Approval"
-                  onClick={() => {
-                    const token = job.approvalToken || generateToken();
-                    router.push(`/shopproof/sign/${token}`);
-                  }}
+                  icon={approvalGenerating ? <LoaderCircle size={16} className="spin" /> : <CheckCircle size={16} />}
+                  label={approvalGenerating ? "Generating link..." : "Customer Approval"}
+                  onClick={openApprovalModal}
                 />
                 <ActionButton
                   icon={<Shield size={16} />}
@@ -466,6 +523,160 @@ export default function JobDetailPage() {
           </aside>
         </div>
       </div>
+
+      {/* Approval Link Modal */}
+      {approvalModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(12,22,36,0.72)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 1000,
+          }}
+          onClick={() => setApprovalModal(null)}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              background: THEME.panel,
+              border: THEME.panelBorder,
+              borderRadius: 28,
+              boxShadow: "0 40px 100px rgba(12,22,36,0.38)",
+              overflow: "hidden",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div
+              style={{
+                background: THEME.statusBar,
+                padding: "18px 20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 900, color: "rgba(218,230,243,0.55)", textTransform: "uppercase", letterSpacing: "0.10em" }}>
+                  Customer Approval
+                </div>
+                <div style={{ marginTop: 4, fontSize: 20, fontWeight: 950, color: THEME.textOnDark, letterSpacing: "-0.03em" }}>
+                  Share Approval Link
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovalModal(null)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: THEME.textOnDarkMuted,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div style={{ padding: "20px" }}>
+              <p style={{ margin: "0 0 16px", fontSize: 13, color: THEME.textMuted, lineHeight: 1.6 }}>
+                Send this link to the customer. They can review the documentation and sign their approval digitally from any device — no account required.
+              </p>
+
+              {/* Link display */}
+              <div
+                style={{
+                  borderRadius: 14,
+                  border: THEME.cardBorder,
+                  background: THEME.card,
+                  padding: "12px 14px",
+                  marginBottom: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    flex: 1,
+                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: THEME.blue,
+                    wordBreak: "break-all",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {approvalModal.link}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: "grid", gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => copyLink(approvalModal.link)}
+                  style={{
+                    ...primaryButtonStyle,
+                    background: copied
+                      ? "linear-gradient(180deg, #059669 0%, #047857 100%)"
+                      : THEME.buttonBlue,
+                    border: copied ? "1px solid rgba(4,120,87,0.40)" : "1px solid rgba(29,78,216,0.36)",
+                    boxShadow: copied
+                      ? "0 10px 24px rgba(5,150,105,0.22)"
+                      : "0 10px 24px rgba(37,99,235,0.20)",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                >
+                  {copied ? <CheckCircle size={16} /> : <Copy size={16} />}
+                  {copied ? "Link Copied!" : "Copy Link"}
+                </button>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <a
+                    href={`sms:?body=${encodeURIComponent(`Please review and sign your vehicle service approval: ${approvalModal.link}`)}`}
+                    style={{
+                      ...outlineButtonStyle,
+                      textDecoration: "none",
+                      justifyContent: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <MessageSquare size={15} />
+                    Text
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setApprovalModal(null);
+                      router.push(`/shopproof/sign/${approvalModal.token}`);
+                    }}
+                    style={{ ...outlineButtonStyle, justifyContent: "center", gap: 8 }}
+                  >
+                    <ExternalLink size={15} />
+                    Open Here
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .spin {
